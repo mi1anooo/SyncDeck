@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SyncDeck.Views.Controls.MinimalPlaybackControls">
+
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalAlignment="Bottom">
+
+    <Button x:Name="PlayPauseBtn"
+            Classes="turntablePrimary"
+            Width="58" Height="58"
+            CornerRadius="29"
+            ToolTip.Tip="Play / Pause">
+      <Canvas x:Name="PlayIcon" Width="18" Height="18" />
+    </Button>
+
+    <Border Grid.Column="1" />
+
+    <Button Grid.Column="2"
+            x:Name="PrevBtn"
+            Classes="turntableSecondary"
+            Width="38" Height="38"
+            CornerRadius="19"
+            ToolTip.Tip="Previous"
+            Margin="0,10,8,0">
+      <Canvas Width="18" Height="18">
+        <Polygon Points="13,3 5,9 13,15" Fill="#DDFFFFFF" />
+        <Rectangle Canvas.Left="3" Canvas.Top="3" Width="1.6" Height="12" Fill="#A8FFFFFF" />
+      </Canvas>
+    </Button>
+
+    <Button Grid.Column="3"
+            x:Name="NextBtn"
+            Classes="turntableSecondary"
+            Width="38" Height="38"
+            CornerRadius="19"
+            ToolTip.Tip="Next"
+            Margin="0,10,0,0">
+      <Canvas Width="18" Height="18">
+        <Polygon Points="5,3 13,9 5,15" Fill="#DDFFFFFF" />
+        <Rectangle Canvas.Left="13.4" Canvas.Top="3" Width="1.6" Height="12" Fill="#A8FFFFFF" />
+      </Canvas>
+    </Button>
+
+  </Grid>
+</UserControl>

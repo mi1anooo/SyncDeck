@@ -6,9 +6,9 @@
         x:Class="SyncDeck.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="SyncDeck"
-        Width="320" Height="540"
-        MinWidth="280" MinHeight="480"
-        MaxWidth="480" MaxHeight="720"
+        Width="760" Height="430"
+        MinWidth="680" MinHeight="380"
+        MaxWidth="1040" MaxHeight="620"
         SystemDecorations="None"
         Background="Transparent"
         TransparencyLevelHint="AcrylicBlur"
@@ -18,100 +18,132 @@
 
   <Window.Styles>
     <Style Selector="Button.chrome">
-      <Setter Property="Background"      Value="{DynamicResource ThemeButtonFill}" />
-      <Setter Property="BorderBrush"     Value="{DynamicResource ThemeButtonBorder}" />
+      <Setter Property="Background" Value="#12FFFFFF" />
+      <Setter Property="BorderBrush" Value="#22FFFFFF" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Padding"         Value="0" />
-      <Setter Property="Cursor"          Value="Hand" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button.chrome:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource ThemeButtonHover}" />
+      <Setter Property="Background" Value="#24FFFFFF" />
     </Style>
-    <Style Selector="Button.transport">
-      <Setter Property="Background"      Value="Transparent" />
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding"         Value="0" />
-      <Setter Property="Cursor"          Value="Hand" />
-      <Setter Property="Width"           Value="44" />
-      <Setter Property="Height"          Value="44" />
+
+    <Style Selector="Button.turntablePrimary">
+      <Setter Property="Background" Value="#202020" />
+      <Setter Property="BorderBrush" Value="#38FFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.turntablePrimary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#2B2B2B" />
+    </Style>
+    <Style Selector="Button.turntablePrimary:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="#141414" />
+    </Style>
+
+    <Style Selector="Button.turntableSecondary">
+      <Setter Property="Background" Value="#0E0E0E" />
+      <Setter Property="BorderBrush" Value="#24FFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.turntableSecondary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1B1B1B" />
+    </Style>
+
+    <Style Selector="ComboBox">
+      <Setter Property="Background" Value="#151515" />
+      <Setter Property="Foreground" Value="#E2E2DC" />
+      <Setter Property="BorderBrush" Value="#28FFFFFF" />
     </Style>
   </Window.Styles>
 
-  <!-- Root panel — allows overlay stacking -->
   <Panel>
 
-    <!-- ── Main window frame ────────────────────────────────────────────────── -->
-    <Border CornerRadius="{DynamicResource ThemeCornerRadius}"
-            Background="{DynamicResource ThemeBackground}"
-            BorderBrush="{DynamicResource ThemeFrameBorder}"
-            BorderThickness="1.5"
-            Margin="6"
-            ClipToBounds="True">
-
+    <Border Margin="12"
+            CornerRadius="34"
+            ClipToBounds="True"
+            Background="#101010"
+            BorderBrush="#242424"
+            BorderThickness="1.2">
       <Border.Effect>
-        <DropShadowEffect BlurRadius="12"
-                          Color="#3CA0FF"
-                          OffsetX="0" OffsetY="0"
-                          Opacity="0.5" />
+        <DropShadowEffect BlurRadius="28"
+                          Color="#99000000"
+                          OffsetX="0" OffsetY="16"
+                          Opacity="0.72" />
       </Border.Effect>
 
-      <Grid RowDefinitions="Auto,*,Auto,Auto">
+      <Grid RowDefinitions="44,*">
 
-        <!-- Title bar -->
         <ctrl:TitleBarControl Grid.Row="0" x:Name="TitleBar" />
 
-        <!-- Visualizer -->
-        <ctrl:VisualizerControl Grid.Row="1"
-                                IsPlaying="{Binding IsPlaying}"
-                                AlbumArtData="{Binding AlbumArtData}"
-                                TrackChanging="{Binding TrackChanging}"
-                                Margin="12,8,12,0" />
+        <Grid Grid.Row="1" ColumnDefinitions="2.35*,*" Margin="10,0,18,18">
 
-        <!-- Track info -->
-        <ctrl:TrackInfoControl Grid.Row="2"
-                               TrackTitle="{Binding TrackTitle}"
-                               Artist="{Binding Artist}"
-                               AlbumName="{Binding AlbumName}"
-                               AlbumArtData="{Binding AlbumArtData}"
-                               Margin="12,8,12,0" />
+          <Border Grid.ColumnSpan="2"
+                  CornerRadius="28"
+                  Background="#0D0D0D"
+                  BorderBrush="#181818"
+                  BorderThickness="1"
+                  Opacity="0.95" />
 
-        <!-- Transport controls + progress bar -->
-        <ctrl:TransportControl Grid.Row="3"
-                               x:Name="Transport"
-                               IsPlaying="{Binding IsPlaying}"
-                               Position="{Binding Position}"
-                               Duration="{Binding Duration}"
-                               ElapsedText="{Binding ElapsedText}"
-                               DurationText="{Binding DurationText}"
-                               PlayPauseCommand="{Binding PlayPauseCommand}"
-                               NextCommand="{Binding NextCommand}"
-                               PreviousCommand="{Binding PreviousCommand}"
-                               Margin="12,8,12,12" />
+          <!-- Main platter and tonearm area -->
+          <ctrl:TurntableControl Grid.Column="0"
+                                 IsPlaying="{Binding IsPlaying}"
+                                 TrackChanging="{Binding TrackChanging}"
+                                 AlbumArtData="{Binding AlbumArtData}"
+                                 TrackTitle="{Binding TrackTitle}"
+                                 Position="{Binding Position}"
+                                 Duration="{Binding Duration}"
+                                 PlaybackRpm="{Binding Settings.PlaybackRpm}"
+                                 Margin="0,-8,0,0" />
 
+          <!-- Right-side metadata/control strip -->
+          <Grid Grid.Column="1" RowDefinitions="*,Auto" Margin="2,20,6,8">
+            <ctrl:TrackMetadataView Grid.Row="0"
+                                    TrackTitle="{Binding TrackTitle}"
+                                    Artist="{Binding Artist}"
+                                    AlbumName="{Binding AlbumName}"
+                                    AlbumArtData="{Binding AlbumArtData}"
+                                    ElapsedText="{Binding ElapsedText}"
+                                    DurationText="{Binding DurationText}" />
+
+            <ctrl:MinimalPlaybackControls Grid.Row="1"
+                                          x:Name="Transport"
+                                          IsPlaying="{Binding IsPlaying}"
+                                          Position="{Binding Position}"
+                                          Duration="{Binding Duration}"
+                                          ElapsedText="{Binding ElapsedText}"
+                                          DurationText="{Binding DurationText}"
+                                          PlayPauseCommand="{Binding PlayPauseCommand}"
+                                          NextCommand="{Binding NextCommand}"
+                                          PreviousCommand="{Binding PreviousCommand}"
+                                          Margin="0,0,0,2" />
+          </Grid>
+
+        </Grid>
       </Grid>
     </Border>
 
-    <!-- ── Settings overlay — floats above main frame ───────────────────────── -->
     <panels:SettingsPanel
         DataContext="{Binding Settings}"
         IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen}"
         HorizontalAlignment="Right"
         VerticalAlignment="Top"
-        Width="230"
-        Margin="0,42,8,0"
+        Width="250"
+        Margin="0,58,26,0"
         ZIndex="100" />
 
-    <!-- ── Status strip at bottom ───────────────────────────────────────────── -->
     <TextBlock Text="{Binding StatusMessage}"
-               Foreground="{DynamicResource ThemeTextSecondary}"
-               FontSize="9"
+               Foreground="#A8FFFFFF"
+               FontSize="10"
                TextAlignment="Center"
                HorizontalAlignment="Stretch"
                VerticalAlignment="Bottom"
-               Margin="8,0,8,8"
+               Margin="24,0,24,26"
                IsVisible="{Binding StatusMessage,
                            Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
   </Panel>
-
 </Window>

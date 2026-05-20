@@ -1,106 +1,85 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="SyncDeck.Views.Controls.TitleBarControl"
-             Height="36">
+             Height="44">
 
-  <Border Background="{DynamicResource ThemeSurfacePrimary}"
-          BorderBrush="{DynamicResource ThemeFrameBorder}"
-          BorderThickness="0,0,0,1">
+  <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent">
 
-    <Grid ColumnDefinitions="Auto,*,Auto">
+    <StackPanel Grid.Column="0"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="22,0,0,0"
+                Spacing="9">
+      <Canvas Width="18" Height="18" VerticalAlignment="Center">
+        <Ellipse Width="18" Height="18"
+                 Stroke="#B6FFFFFF"
+                 StrokeThickness="1.5"
+                 Fill="Transparent" />
+        <Path Data="M 10.8 4.2 C 8.5 3.1 5.8 4.5 5.8 7.2 C 5.8 9.8 8.3 10.7 10.3 11.3 C 11.1 11.6 11.1 13.1 9.5 13.8 C 7.4 14.7 5.3 13.4 4.6 11.8"
+              Stroke="#D8D8D2"
+              StrokeThickness="1.2"
+              StrokeLineCap="Round"
+              Fill="Transparent" />
+      </Canvas>
+      <TextBlock Text="SYNCDECK"
+                 FontSize="11"
+                 FontWeight="SemiBold"
+                 LetterSpacing="3.1"
+                 Foreground="#D8D8D2"
+                 VerticalAlignment="Center" />
+    </StackPanel>
 
-      <!-- App name -->
-      <StackPanel Grid.Column="0"
-                  Orientation="Horizontal"
-                  VerticalAlignment="Center"
-                  Margin="10,0,0,0"
-                  Spacing="6">
+    <StackPanel Grid.Column="2"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="0,0,18,0"
+                Spacing="6">
 
-        <!-- Logo mark: small accent diamond -->
-        <Canvas Width="10" Height="10" VerticalAlignment="Center">
-          <Polygon Points="5,0 10,5 5,10 0,5"
-                   Fill="{DynamicResource ThemeAccentPrimary}" />
+      <Button x:Name="SettingsBtn"
+              Classes="chrome"
+              Width="28" Height="28"
+              CornerRadius="14"
+              ToolTip.Tip="Settings">
+        <TextBlock Text="⋯"
+                   FontSize="18"
+                   Foreground="#B6FFFFFF"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Center"
+                   Margin="0,-5,0,0" />
+      </Button>
+
+      <Button x:Name="MinimizeBtn"
+              Classes="chrome"
+              Width="22" Height="22"
+              CornerRadius="11"
+              ToolTip.Tip="Minimize">
+        <Canvas Width="8" Height="8">
+          <Line StartPoint="1,5" EndPoint="7,5" Stroke="#8DFFFFFF" StrokeThickness="1.3" />
         </Canvas>
+      </Button>
 
-        <TextBlock Text="SYNCDECK"
-                   FontSize="11"
-                   FontWeight="Bold"
-                   LetterSpacing="2"
-                   Foreground="{DynamicResource ThemeTextPrimary}"
-                   VerticalAlignment="Center" />
-      </StackPanel>
+      <Button x:Name="MaximizeBtn"
+              Classes="chrome"
+              Width="22" Height="22"
+              CornerRadius="11"
+              ToolTip.Tip="Maximize / Restore">
+        <Canvas Width="8" Height="8">
+          <Rectangle Canvas.Left="1.5" Canvas.Top="1.5" Width="5" Height="5"
+                     Stroke="#8DFFFFFF" StrokeThickness="1" Fill="Transparent" />
+        </Canvas>
+      </Button>
 
-      <!-- Window chrome buttons -->
-      <StackPanel Grid.Column="2"
-                  Orientation="Horizontal"
-                  VerticalAlignment="Center"
-                  Margin="0,0,6,0"
-                  Spacing="4">
+      <Button x:Name="CloseBtn"
+              Classes="chrome"
+              Width="22" Height="22"
+              CornerRadius="11"
+              ToolTip.Tip="Close">
+        <Canvas Width="8" Height="8">
+          <Line StartPoint="1.5,1.5" EndPoint="6.5,6.5" Stroke="#B6FFFFFF" StrokeThickness="1.15" />
+          <Line StartPoint="6.5,1.5" EndPoint="1.5,6.5" Stroke="#B6FFFFFF" StrokeThickness="1.15" />
+        </Canvas>
+      </Button>
 
-        <!-- Settings -->
-        <Button x:Name="SettingsBtn"
-                Classes="chrome"
-                Width="22" Height="22"
-                CornerRadius="3"
-                ToolTip.Tip="Settings">
-          <Canvas Width="12" Height="12">
-            <!-- Gear icon (simplified) -->
-            <Ellipse Canvas.Left="3" Canvas.Top="3" Width="6" Height="6"
-                     Stroke="{DynamicResource ThemeTextSecondary}" StrokeThickness="1.5"
-                     Fill="Transparent" />
-            <Line StartPoint="6,0" EndPoint="6,3"
-                  Stroke="{DynamicResource ThemeTextSecondary}" StrokeThickness="1.5" />
-            <Line StartPoint="6,9" EndPoint="6,12"
-                  Stroke="{DynamicResource ThemeTextSecondary}" StrokeThickness="1.5" />
-            <Line StartPoint="0,6" EndPoint="3,6"
-                  Stroke="{DynamicResource ThemeTextSecondary}" StrokeThickness="1.5" />
-            <Line StartPoint="9,6" EndPoint="12,6"
-                  Stroke="{DynamicResource ThemeTextSecondary}" StrokeThickness="1.5" />
-          </Canvas>
-        </Button>
-
-        <!-- Minimize — underscore bar -->
-        <Button x:Name="MinimizeBtn"
-                Classes="chrome"
-                Width="22" Height="22"
-                CornerRadius="3"
-                ToolTip.Tip="Minimize">
-          <Canvas Width="10" Height="2">
-            <Line StartPoint="0,1" EndPoint="10,1"
-                  Stroke="{DynamicResource ThemeTextSecondary}" StrokeThickness="1.5" />
-          </Canvas>
-        </Button>
-
-        <!-- Maximize — outer square with inner accent corner -->
-        <Button x:Name="MaximizeBtn"
-                Classes="chrome"
-                Width="22" Height="22"
-                CornerRadius="3"
-                ToolTip.Tip="Maximize / Restore">
-          <Canvas Width="10" Height="10">
-            <Rectangle Canvas.Left="0" Canvas.Top="0" Width="10" Height="10"
-                       Stroke="{DynamicResource ThemeTextSecondary}" StrokeThickness="1.5"
-                       Fill="Transparent" />
-            <Line StartPoint="0,3" EndPoint="10,3"
-                  Stroke="{DynamicResource ThemeAccentPrimary}" StrokeThickness="1" />
-          </Canvas>
-        </Button>
-
-        <!-- Close — X -->
-        <Button x:Name="CloseBtn"
-                Classes="chrome"
-                Width="22" Height="22"
-                CornerRadius="3"
-                ToolTip.Tip="Close">
-          <Canvas Width="10" Height="10">
-            <Line StartPoint="0,0" EndPoint="10,10"
-                  Stroke="{DynamicResource ThemeAccentPrimary}" StrokeThickness="1.5" />
-            <Line StartPoint="10,0" EndPoint="0,10"
-                  Stroke="{DynamicResource ThemeAccentPrimary}" StrokeThickness="1.5" />
-          </Canvas>
-        </Button>
-
-      </StackPanel>
-    </Grid>
-  </Border>
+    </StackPanel>
+  </Grid>
 </UserControl>

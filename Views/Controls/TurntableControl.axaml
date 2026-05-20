@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ctrl="using:SyncDeck.Views.Controls"
+             x:Class="SyncDeck.Views.Controls.TurntableControl"
+             x:Name="Root">
+  <Grid ClipToBounds="False">
+    <ctrl:VinylRecordControl x:Name="Record" />
+    <ctrl:ProgressArcControl x:Name="ProgressArc" />
+    <ctrl:TonearmControl x:Name="Tonearm" />
+  </Grid>
+</UserControl>

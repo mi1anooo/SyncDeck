@@ -6,66 +6,68 @@
 
   <UserControl.Styles>
     <Style Selector="TextBlock.label">
-      <Setter Property="FontSize"       Value="9" />
-      <Setter Property="LetterSpacing" Value="1.2" />
-      <Setter Property="FontWeight"    Value="Bold" />
-      <Setter Property="Foreground"    Value="{DynamicResource ThemeTextSecondary}" />
-      <Setter Property="Margin"        Value="0,8,0,2" />
-    </Style>
-    <Style Selector="ComboBox">
-      <Setter Property="Background"    Value="{DynamicResource ThemeButtonFill}" />
-      <Setter Property="BorderBrush"   Value="{DynamicResource ThemeButtonBorder}" />
-      <Setter Property="Foreground"    Value="{DynamicResource ThemeTextPrimary}" />
-      <Setter Property="FontSize"      Value="11" />
-      <Setter Property="Height"        Value="28" />
-      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="FontSize" Value="8" />
+      <Setter Property="LetterSpacing" Value="2.2" />
+      <Setter Property="Foreground" Value="#7FFFFFFF" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,7,0,3" />
     </Style>
     <Style Selector="Button.action">
-      <Setter Property="Background"    Value="{DynamicResource ThemeButtonFill}" />
-      <Setter Property="BorderBrush"   Value="{DynamicResource ThemeButtonBorder}" />
+      <Setter Property="Background" Value="#14FFFFFF" />
+      <Setter Property="Foreground" Value="#E5E5DF" />
+      <Setter Property="BorderBrush" Value="#26FFFFFF" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Foreground"    Value="{DynamicResource ThemeAccentPrimary}" />
-      <Setter Property="FontSize"      Value="10" />
-      <Setter Property="FontWeight"    Value="SemiBold" />
-      <Setter Property="Height"        Value="28" />
-      <Setter Property="HorizontalAlignment" Value="Stretch" />
-      <Setter Property="Cursor"        Value="Hand" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Cursor" Value="Hand" />
     </Style>
-    <Style Selector="ToggleSwitch">
-      <Setter Property="OffContent" Value="" />
-      <Setter Property="OnContent"  Value="" />
-      <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimary}" />
+    <Style Selector="Button.action:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#22FFFFFF" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="Background" Value="#151515" />
+      <Setter Property="Foreground" Value="#E5E5DF" />
+      <Setter Property="BorderBrush" Value="#22FFFFFF" />
+      <Setter Property="FontSize" Value="11" />
     </Style>
   </UserControl.Styles>
 
-  <!-- Panel frame -->
-  <Border Background="{DynamicResource ThemeSurfacePrimary}"
-          BorderBrush="{DynamicResource ThemeFrameBorder}"
+  <Border CornerRadius="18"
+          Background="#F00B0B0B"
+          BorderBrush="#28FFFFFF"
           BorderThickness="1"
-          CornerRadius="{DynamicResource ThemeInnerCorner}"
-          Padding="14,10"
-          Margin="6,0">
-
+          Padding="14">
     <Border.Effect>
-      <DropShadowEffect BlurRadius="12" OffsetX="-4" OffsetY="4" Opacity="0.5"
-                        Color="#1A1A2E" />
+      <DropShadowEffect BlurRadius="18" Color="#AA000000" OffsetX="0" OffsetY="10" Opacity="0.75" />
     </Border.Effect>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-      <StackPanel Spacing="2">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="340">
+      <StackPanel Spacing="4">
 
-        <!-- Header -->
         <TextBlock Text="SETTINGS"
-                   FontSize="10"
-                   LetterSpacing="3"
-                   FontWeight="Bold"
-                   Foreground="{DynamicResource ThemeAccentPrimary}"
-                   Margin="0,0,0,6" />
+                   FontSize="9"
+                   LetterSpacing="3.1"
+                   FontWeight="SemiBold"
+                   Foreground="#D8D8D2"
+                   Margin="0,0,0,8" />
 
-        <Separator Background="{DynamicResource ThemeFrameBorder}" Height="1" Margin="0,2,0,4" />
+        <TextBlock Classes="label" Text="MUSIC SOURCE" />
+        <ComboBox ItemsSource="{Binding Sources}"
+                  SelectedItem="{Binding SelectedSource}" />
 
-        <!-- Theme selector -->
+        <Button Classes="action"
+                Content="{Binding SpotifyStatusText}"
+                Command="{Binding SpotifyLoginCommand}"
+                Margin="0,7,0,0" />
+
+        <Button Classes="action"
+                Content="{Binding AppleStatusText}"
+                Command="{Binding AppleMusicConnectCommand}"
+                Margin="0,4,0,0" />
+
+        <Border Height="1" Background="#18FFFFFF" Margin="0,10,0,2" />
+
         <TextBlock Classes="label" Text="THEME" />
         <ComboBox ItemsSource="{Binding Themes}"
                   SelectedItem="{Binding SelectedTheme}">
@@ -76,75 +78,53 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
 
-        <Button Classes="action"
-                Content="RESET THEME"
-                Command="{Binding ResetThemeCommand}"
-                Margin="0,4,0,0" />
+        <TextBlock Classes="label" Text="PLAYBACK SPEED" />
+        <Grid ColumnDefinitions="*,Auto">
+          <ComboBox Grid.Column="0"
+                    ItemsSource="{Binding PlaybackSpeeds}"
+                    SelectedItem="{Binding PlaybackRpm}" />
+          <TextBlock Grid.Column="1"
+                     Text="RPM"
+                     FontSize="10"
+                     LetterSpacing="1.4"
+                     Foreground="#78FFFFFF"
+                     VerticalAlignment="Center"
+                     Margin="8,0,0,0" />
+        </Grid>
 
-        <Separator Background="{DynamicResource ThemeFrameBorder}" Height="1" Margin="0,8,0,4" />
+        <Border Height="1" Background="#18FFFFFF" Margin="0,10,0,2" />
 
-        <!-- Source selector -->
-        <TextBlock Classes="label" Text="MUSIC SOURCE" />
-        <ComboBox ItemsSource="{Binding Sources}"
-                  SelectedItem="{Binding SelectedSource}" />
-
-        <!-- Spotify -->
-        <Button Classes="action"
-                Content="{Binding SpotifyStatusText}"
-                Command="{Binding SpotifyLoginCommand}"
-                Margin="0,6,0,0" />
-
-        <!-- Apple Music -->
-        <Button Classes="action"
-                Content="{Binding AppleStatusText}"
-                Command="{Binding AppleMusicConnectCommand}"
-                Margin="0,4,0,0" />
-
-        <Separator Background="{DynamicResource ThemeFrameBorder}" Height="1" Margin="0,8,0,4" />
-
-        <!-- Playlist -->
-        <TextBlock Classes="label" Text="PLAYLIST" />
-        <ComboBox ItemsSource="{Binding Playlists}"
-                  SelectedItem="{Binding SelectedPlaylist}"
-                  DisplayMemberBinding="{Binding Name}" />
-
-        <Button Classes="action"
-                Content="REFRESH PLAYLISTS"
-                Command="{Binding RefreshPlaylistsCommand}"
-                Margin="0,4,0,0" />
-
-        <Separator Background="{DynamicResource ThemeFrameBorder}" Height="1" Margin="0,8,0,4" />
-
-        <!-- Toggles -->
-        <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,4">
           <TextBlock Grid.Column="0" Text="Shuffle"
-                     Foreground="{DynamicResource ThemeTextPrimary}"
+                     Foreground="#CFCFC9"
                      VerticalAlignment="Center" FontSize="11" />
           <ToggleSwitch Grid.Column="1" IsChecked="{Binding Shuffle}" />
         </Grid>
 
-        <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,4">
           <TextBlock Grid.Column="0" Text="Always on Top"
-                     Foreground="{DynamicResource ThemeTextPrimary}"
+                     Foreground="#CFCFC9"
                      VerticalAlignment="Center" FontSize="11" />
           <ToggleSwitch Grid.Column="1" IsChecked="{Binding AlwaysOnTop}" />
         </Grid>
 
-        <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,4">
           <TextBlock Grid.Column="0" Text="Transparency"
-                     Foreground="{DynamicResource ThemeTextPrimary}"
+                     Foreground="#CFCFC9"
                      VerticalAlignment="Center" FontSize="11" />
           <ToggleSwitch Grid.Column="1" IsChecked="{Binding Transparent}" />
         </Grid>
 
-        <Separator Background="{DynamicResource ThemeFrameBorder}" Height="1" Margin="0,8,0,4" />
+        <Button Classes="action"
+                Content="REFRESH PLAYLISTS"
+                Command="{Binding RefreshPlaylistsCommand}"
+                Margin="0,8,0,0" />
 
-        <!-- Version footer -->
         <TextBlock Text="SyncDeck v1.0.0"
                    FontSize="8"
-                   Foreground="{DynamicResource ThemeTextSecondary}"
+                   Foreground="#60FFFFFF"
                    TextAlignment="Center"
-                   Margin="0,4,0,2" />
+                   Margin="0,10,0,0" />
 
       </StackPanel>
     </ScrollViewer>

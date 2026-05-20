@@ -30,6 +30,8 @@ public partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<string> Sources { get; } = new() { "Mock", "Spotify", "Apple Music" };
 
+    public ObservableCollection<double> PlaybackSpeeds { get; } = new() { 33.0, 45.0 };
+
     [ObservableProperty] private string _selectedSource = "Mock";
 
     partial void OnSelectedSourceChanged(string value)
@@ -117,6 +119,16 @@ public partial class SettingsViewModel : ObservableObject
         SettingsService.Save(_persisted);
     }
 
+    // ── Turntable playback speed ─────────────────────────────────────────────
+
+    [ObservableProperty] private double _playbackRpm = 33.0;
+
+    partial void OnPlaybackRpmChanged(double value)
+    {
+        _persisted.PlaybackRpm = value;
+        SettingsService.Save(_persisted);
+    }
+
     // ── Toggles ───────────────────────────────────────────────────────────────
 
     [ObservableProperty] private bool _shuffle;
@@ -174,6 +186,7 @@ public partial class SettingsViewModel : ObservableObject
 
         _alwaysOnTop = _persisted.AlwaysOnTop;
         _transparent = _persisted.Transparent;
+        _playbackRpm = Math.Abs(_persisted.PlaybackRpm - 45.0) < 0.1 ? 45.0 : 33.0;
         _shuffle     = _persisted.Shuffle;
 
         _music.SwitchProvider(_persisted.CurrentProvider);
