@@ -6,6 +6,8 @@ using System;
 
 namespace SyncDeck.Views.Controls;
 
+// ── VisualizerControl — thin host, passes property changes to renderer ─────────
+
 public partial class VisualizerControl : UserControl
 {
     public static readonly StyledProperty<bool> IsPlayingProperty =
@@ -24,29 +26,32 @@ public partial class VisualizerControl : UserControl
     public VisualizerControl()
     {
         InitializeComponent();
-
-        IsPlayingProperty.Changed.Subscribe(e =>
-        {
-            if (e.Sender == this && _renderer is not null)
-                _renderer.IsPlaying = (bool)e.NewValue.Value!;
-        });
-        TrackChangingProperty.Changed.Subscribe(e =>
-        {
-            if (e.Sender == this && _renderer is not null && (bool)e.NewValue.Value!)
-                _renderer.TriggerFlash();
-        });
-
         this.Loaded += (_, _) =>
         {
             _renderer = new VisualizerRenderer(VisCanvas) { IsPlaying = IsPlaying };
             VisCanvas.Children.Add(_renderer);
         };
     }
+
+    // Avalonia 11: override OnPropertyChanged instead of .Changed.Subscribe()
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (_renderer is null) return;
+
+        if (change.Property == IsPlayingProperty)
+            _renderer.IsPlaying = (bool)change.NewValue!;
+
+        if (change.Property == TrackChangingProperty && change.NewValue is true)
+            _renderer.TriggerFlash();
+    }
 }
+
+// ── VisualizerRenderer — self-drawing control ─────────────────────────────────
 
 public class VisualizerRenderer : Control
 {
-    private readonly Canvas _parent;
+    private readonly Canvas _canvas;
 
     private double   _angle      = 0;
     private double   _waveOffset = 0;
@@ -62,28 +67,27 @@ public class VisualizerRenderer : Control
     private Color  _secondary = Color.Parse("#0A3060");
     private string _style     = "minidisc";
 
-    public VisualizerRenderer(Canvas parent)
+    // Helper — Avalonia Color is an immutable struct, NOT a C# record.
+    // Use the 4-arg constructor: Color(a, r, g, b)
+    private static Color A(Color c, byte alpha) => new Color(alpha, c.R, c.G, c.B);
+
+    public VisualizerRenderer(Canvas canvas)
     {
-        _parent = parent;
+        _canvas          = canvas;
         IsHitTestVisible = false;
 
-        // Bind own size to parent Canvas bounds so we fill it
-        _parent.GetObservable(BoundsProperty).Subscribe(b =>
+        // Size ourselves to match the parent Canvas
+        _canvas.SizeChanged += (_, e) =>
         {
-            Width  = b.Width;
-            Height = b.Height;
+            Width  = e.NewSize.Width;
+            Height = e.NewSize.Height;
             InvalidateVisual();
-        });
+        };
 
         for (int i = 0; i < _barTargets.Length; i++) _barTargets[i] = 0.1;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
-        _timer.Tick += (_, _) =>
-        {
-            RefreshThemeColors();
-            Animate();
-            InvalidateVisual();
-        };
+        _timer.Tick += (_, _) => { RefreshThemeColors(); Animate(); InvalidateVisual(); };
         _timer.Start();
     }
 
@@ -113,7 +117,7 @@ public class VisualizerRenderer : Control
         }
         else
         {
-            _angle += 0.18; // slow idle drift
+            _angle += 0.18;
             for (int i = 0; i < _barHeights.Length; i++)
                 _barHeights[i] *= 0.93;
         }
@@ -122,11 +126,10 @@ public class VisualizerRenderer : Control
 
     public override void Render(DrawingContext ctx)
     {
-        var w = Bounds.Width;
-        var h = Bounds.Height;
+        var w = Bounds.Width; var h = Bounds.Height;
         if (w <= 0 || h <= 0) return;
 
-        ctx.FillRectangle(new SolidColorBrush(_secondary with { A = 25 }), new Rect(0, 0, w, h));
+        ctx.FillRectangle(new SolidColorBrush(A(_secondary, 25)), new Rect(0, 0, w, h));
 
         switch (_style)
         {
@@ -137,8 +140,7 @@ public class VisualizerRenderer : Control
         }
 
         if (_flash > 0)
-            ctx.FillRectangle(
-                new SolidColorBrush(_primary with { A = (byte)(_flash * 55) }),
+            ctx.FillRectangle(new SolidColorBrush(A(_primary, (byte)(_flash * 55))),
                 new Rect(0, 0, w, h));
 
         DrawScanLines(ctx, w, h);
@@ -151,9 +153,8 @@ public class VisualizerRenderer : Control
         var cx = w / 2; var cy = h / 2;
         var r  = Math.Min(w, h) * 0.40;
 
-        ctx.DrawEllipse(
-            new SolidColorBrush(_primary with { A = 15 }),
-            new Pen(new SolidColorBrush(_primary with { A = 55 }), 1.5),
+        ctx.DrawEllipse(new SolidColorBrush(A(_primary, 15)),
+            new Pen(new SolidColorBrush(A(_primary, 55)), 1.5),
             new Point(cx, cy), r + 10, r + 10);
 
         var rad = _angle * Math.PI / 180.0;
@@ -162,8 +163,7 @@ public class VisualizerRenderer : Control
             Matrix.CreateRotation(rad) *
             Matrix.CreateTranslation(cx, cy)))
         {
-            ctx.DrawEllipse(
-                new SolidColorBrush(_secondary with { A = 220 }),
+            ctx.DrawEllipse(new SolidColorBrush(A(_secondary, 220)),
                 new Pen(new SolidColorBrush(_primary), 1.5),
                 new Point(cx, cy), r, r);
 
@@ -171,93 +171,76 @@ public class VisualizerRenderer : Control
             {
                 var rr = r * (0.25 + i * 0.16);
                 ctx.DrawEllipse(Brushes.Transparent,
-                    new Pen(new SolidColorBrush(_primary with { A = (byte)(25 + i * 12) }), 0.5),
+                    new Pen(new SolidColorBrush(A(_primary, (byte)(25 + i * 12))), 0.5),
                     new Point(cx, cy), rr, rr);
             }
-            ctx.DrawLine(
-                new Pen(new SolidColorBrush(_primary with { A = 100 }), 1),
+            ctx.DrawLine(new Pen(new SolidColorBrush(A(_primary, 100)), 1),
                 new Point(cx, cy), new Point(cx + r * 0.85, cy));
         }
 
         ctx.DrawEllipse(new SolidColorBrush(_primary), null, new Point(cx, cy), 5, 5);
 
         if (IsPlaying)
-            ctx.DrawEllipse(new SolidColorBrush(_primary with { A = 200 }), null,
+            ctx.DrawEllipse(new SolidColorBrush(A(_primary, 200)), null,
                 new Point(cx + r + 12, cy), 3, 3);
     }
 
     private void DrawMiniDisc(DrawingContext ctx, double w, double h)
     {
-        var cx    = w / 2; var cy = h / 2;
-        var cardW = Math.Min(w, h) * 0.78;
-        var cardH = cardW * 0.90;
-        var x0    = cx - cardW / 2;
-        var y0    = cy - cardH / 2;
+        var cx = w / 2; var cy = h / 2;
+        var cw = Math.Min(w, h) * 0.78;
+        var ch = cw * 0.90;
+        var x0 = cx - cw / 2; var y0 = cy - ch / 2;
 
-        // Cartridge body
-        ctx.FillRectangle(new SolidColorBrush(_secondary with { A = 210 }),
-            new Rect(x0, y0, cardW, cardH), 5);
+        ctx.FillRectangle(new SolidColorBrush(A(_secondary, 210)), new Rect(x0, y0, cw, ch), 5);
         ctx.DrawRectangle(Brushes.Transparent,
-            new Pen(new SolidColorBrush(_primary with { A = 160 }), 1.5),
-            new Rect(x0, y0, cardW, cardH), 5, 5);
+            new Pen(new SolidColorBrush(A(_primary, 160)), 1.5),
+            new Rect(x0, y0, cw, ch), 5, 5);
 
-        // Shutter slot
-        var shutW = cardW * 0.74; var shutH = cardH * 0.10;
-        var shutX = cx - shutW / 2;
-        var shutY = y0 + cardH * 0.07;
-        ctx.FillRectangle(new SolidColorBrush(_primary with { A = 30 }),
-            new Rect(shutX, shutY, shutW, shutH), 2);
+        var sw = cw * 0.74; var sh = ch * 0.10;
+        var sx = cx - sw / 2; var sy = y0 + ch * 0.07;
+        ctx.FillRectangle(new SolidColorBrush(A(_primary, 30)), new Rect(sx, sy, sw, sh), 2);
         ctx.DrawRectangle(Brushes.Transparent,
-            new Pen(new SolidColorBrush(_primary with { A = 80 }), 1),
-            new Rect(shutX, shutY, shutW, shutH), 2, 2);
+            new Pen(new SolidColorBrush(A(_primary, 80)), 1),
+            new Rect(sx, sy, sw, sh), 2, 2);
 
-        // Rotating disc
-        var discCx = cx; var discCy = cy + cardH * 0.06;
-        var discR  = cardW * 0.27;
-        var rad    = _angle * Math.PI / 180.0;
+        var dcx = cx; var dcy = cy + ch * 0.06; var dr = cw * 0.27;
+        var rad = _angle * Math.PI / 180.0;
         using (ctx.PushTransform(
-            Matrix.CreateTranslation(-discCx, -discCy) *
+            Matrix.CreateTranslation(-dcx, -dcy) *
             Matrix.CreateRotation(rad) *
-            Matrix.CreateTranslation(discCx, discCy)))
+            Matrix.CreateTranslation(dcx, dcy)))
         {
-            ctx.DrawEllipse(
-                new SolidColorBrush(_secondary with { A = 240 }),
+            ctx.DrawEllipse(new SolidColorBrush(A(_secondary, 240)),
                 new Pen(new SolidColorBrush(_primary), 1.5),
-                new Point(discCx, discCy), discR, discR);
+                new Point(dcx, dcy), dr, dr);
             for (int i = 1; i <= 3; i++)
                 ctx.DrawEllipse(Brushes.Transparent,
-                    new Pen(new SolidColorBrush(_primary with { A = 35 }), 0.5),
-                    new Point(discCx, discCy),
-                    discR * (0.3 + i * 0.22), discR * (0.3 + i * 0.22));
+                    new Pen(new SolidColorBrush(A(_primary, 35)), 0.5),
+                    new Point(dcx, dcy), dr * (0.3 + i * 0.22), dr * (0.3 + i * 0.22));
         }
 
-        // Label
-        DrawText(ctx, "SYNCDECK  MZ-1", new Point(cx, y0 + cardH * 0.80), 8, _primary);
-
-        // LED indicator
-        var ledA = IsPlaying ? (byte)220 : (byte)50;
-        ctx.DrawEllipse(new SolidColorBrush(_primary with { A = ledA }), null,
-            new Point(x0 + cardW - 11, y0 + 11), 3.5, 3.5);
+        DrawText(ctx, "SYNCDECK  MZ-1", new Point(cx, y0 + ch * 0.80), 8, _primary);
+        ctx.DrawEllipse(new SolidColorBrush(A(_primary, IsPlaying ? (byte)220 : (byte)50)),
+            null, new Point(x0 + cw - 11, y0 + 11), 3.5, 3.5);
     }
 
     private void DrawWaveform(DrawingContext ctx, double w, double h)
     {
-        var pen   = new Pen(new SolidColorBrush(_primary with { A = 210 }), 1.5);
-        var steps = 80;
-        var amp   = IsPlaying ? 1.0 : 0.12;
-        var prevX = 0.0; var prevY = h / 2;
-
-        for (int i = 1; i <= steps; i++)
+        var pen  = new Pen(new SolidColorBrush(A(_primary, 210)), 1.5);
+        var amp  = IsPlaying ? 1.0 : 0.12;
+        var px   = 0.0; var py = h / 2;
+        for (int i = 1; i <= 80; i++)
         {
-            var t    = (double)i / steps;
+            var t    = (double)i / 80;
             var x    = t * w;
             var wave = (Math.Sin(t * Math.PI * 8 + _waveOffset * 0.05) * 0.65
                       + Math.Sin(t * Math.PI * 3 + _waveOffset * 0.03) * 0.35) * h * 0.26 * amp;
             var y    = h / 2 + wave;
-            ctx.DrawLine(pen, new Point(prevX, prevY), new Point(x, y));
-            prevX = x; prevY = y;
+            ctx.DrawLine(pen, new Point(px, py), new Point(x, y));
+            px = x; py = y;
         }
-        ctx.DrawLine(new Pen(new SolidColorBrush(_primary with { A = 25 }), 0.5),
+        ctx.DrawLine(new Pen(new SolidColorBrush(A(_primary, 25)), 0.5),
             new Point(0, h / 2), new Point(w, h / 2));
     }
 
@@ -266,38 +249,32 @@ public class VisualizerRenderer : Control
         var count = _barHeights.Length;
         var gap   = 3.0;
         var barW  = (w - gap * (count + 1)) / count;
-
         for (int i = 0; i < count; i++)
         {
-            var barH = Math.Max(2, _barHeights[i] * h * 0.84);
-            var x    = gap + i * (barW + gap);
-            var y    = h - barH;
-            ctx.FillRectangle(new SolidColorBrush(_primary with { A = 200 }),
-                new Rect(x, y, barW, barH));
-            ctx.FillRectangle(new SolidColorBrush(_primary),
-                new Rect(x, y, barW, 2));
-            ctx.FillRectangle(new SolidColorBrush(_primary with { A = 22 }),
+            var bh = Math.Max(2, _barHeights[i] * h * 0.84);
+            var x  = gap + i * (barW + gap);
+            var y  = h - bh;
+            ctx.FillRectangle(new SolidColorBrush(A(_primary, 200)), new Rect(x, y, barW, bh));
+            ctx.FillRectangle(new SolidColorBrush(_primary), new Rect(x, y, barW, 2));
+            ctx.FillRectangle(new SolidColorBrush(A(_primary, 22)),
                 new Rect(x, h * 0.92, barW, h * 0.08 * _barHeights[i]));
         }
-        ctx.DrawLine(new Pen(new SolidColorBrush(_primary with { A = 55 }), 1),
+        ctx.DrawLine(new Pen(new SolidColorBrush(A(_primary, 55)), 1),
             new Point(0, h - 1), new Point(w, h - 1));
     }
 
     private static void DrawScanLines(DrawingContext ctx, double w, double h)
     {
-        var pen = new Pen(new SolidColorBrush(Color.FromArgb(9, 0, 0, 0)), 1);
+        var pen = new Pen(new SolidColorBrush(new Color(9, 0, 0, 0)), 1);
         for (double y = 0; y < h; y += 3)
             ctx.DrawLine(pen, new Point(0, y), new Point(w, y));
     }
 
     private static void DrawText(DrawingContext ctx, string text, Point center, double size, Color color)
     {
-        var ft = new FormattedText(
-            text,
+        var ft = new FormattedText(text,
             System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            new Typeface("Consolas"),
-            size,
+            FlowDirection.LeftToRight, new Typeface("Consolas"), size,
             new SolidColorBrush(color));
         ctx.DrawText(ft, new Point(center.X - ft.Width / 2, center.Y - ft.Height / 2));
     }

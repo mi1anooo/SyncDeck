@@ -8,8 +8,8 @@ namespace SyncDeck.Views;
 public partial class MainWindow : Window
 {
     private ViewModels.MainViewModel? _vm;
-    private bool       _isDragging;
-    private PixelPoint _dragStart;
+    private bool  _isDragging;
+    private Point _dragStart;   // logical coords, not pixel
 
     public MainWindow()
     {
@@ -42,35 +42,34 @@ public partial class MainWindow : Window
             TitleBar.SettingsClicked += (_, _) => _vm.ToggleSettingsCommand.Execute(null);
         }
 
-        // Wire transport seek from drag handle
         if (Transport is not null)
-        {
             Transport.SeekRequested += async (_, secs) => await _vm.EndSeekAsync(secs);
-        }
     }
 
-    // ── Window dragging via title bar ─────────────────────────────────────────
+    // ── Window drag — use logical delta × RenderScaling ───────────────────────
 
     private void OnTitleBarPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         _isDragging = true;
-        var pos = e.GetPosition(this);
-        _dragStart = new PixelPoint((int)pos.X, (int)pos.Y);
+        _dragStart  = e.GetPosition(this);  // logical px relative to window
     }
 
     private void OnTitleBarMoved(object? sender, PointerEventArgs e)
     {
         if (!_isDragging) return;
-        var pos       = e.GetPosition(this);
-        var screenPos = PointToScreen(new Point(pos.X - _dragStart.X, pos.Y - _dragStart.Y));
-        Position = screenPos;
+        var current = e.GetPosition(this);
+        var delta   = current - _dragStart;
+        var scale   = RenderScaling;
+        Position = new PixelPoint(
+            Position.X + (int)(delta.X * scale),
+            Position.Y + (int)(delta.Y * scale));
+        // NOTE: don't reset _dragStart — delta stays relative to the press point,
+        // which gives correct absolute dragging behaviour.
     }
 
     private void OnTitleBarReleased(object? sender, PointerReleasedEventArgs e)
         => _isDragging = false;
-
-    // ── Transparency ──────────────────────────────────────────────────────────
 
     private void ApplyTransparency(bool enabled)
     {
