@@ -1,0 +1,117 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SyncDeck.ViewModels"
+        xmlns:ctrl="using:SyncDeck.Views.Controls"
+        xmlns:panels="using:SyncDeck.Views.Panels"
+        x:Class="SyncDeck.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="SyncDeck"
+        Width="320" Height="540"
+        MinWidth="280" MinHeight="480"
+        MaxWidth="480" MaxHeight="720"
+        SystemDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="AcrylicBlur"
+        CanResize="True"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome">
+
+  <Window.Styles>
+    <Style Selector="Button.chrome">
+      <Setter Property="Background"      Value="{DynamicResource ThemeButtonFill}" />
+      <Setter Property="BorderBrush"     Value="{DynamicResource ThemeButtonBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding"         Value="0" />
+      <Setter Property="Cursor"          Value="Hand" />
+    </Style>
+    <Style Selector="Button.chrome:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ThemeButtonHover}" />
+    </Style>
+    <Style Selector="Button.transport">
+      <Setter Property="Background"      Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding"         Value="0" />
+      <Setter Property="Cursor"          Value="Hand" />
+      <Setter Property="Width"           Value="44" />
+      <Setter Property="Height"          Value="44" />
+    </Style>
+  </Window.Styles>
+
+  <!-- Root panel — allows overlay stacking -->
+  <Panel>
+
+    <!-- ── Main window frame ────────────────────────────────────────────────── -->
+    <Border CornerRadius="{DynamicResource ThemeCornerRadius}"
+            Background="{DynamicResource ThemeBackground}"
+            BorderBrush="{DynamicResource ThemeFrameBorder}"
+            BorderThickness="1.5"
+            Margin="6"
+            ClipToBounds="True">
+
+      <Border.Effect>
+        <DropShadowEffect BlurRadius="12"
+                          Color="#3CA0FF"
+                          OffsetX="0" OffsetY="0"
+                          Opacity="0.5" />
+      </Border.Effect>
+
+      <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+        <!-- Title bar -->
+        <ctrl:TitleBarControl Grid.Row="0" x:Name="TitleBar" />
+
+        <!-- Visualizer -->
+        <ctrl:VisualizerControl Grid.Row="1"
+                                IsPlaying="{Binding IsPlaying}"
+                                AlbumArtData="{Binding AlbumArtData}"
+                                TrackChanging="{Binding TrackChanging}"
+                                Margin="12,8,12,0" />
+
+        <!-- Track info -->
+        <ctrl:TrackInfoControl Grid.Row="2"
+                               TrackTitle="{Binding TrackTitle}"
+                               Artist="{Binding Artist}"
+                               AlbumName="{Binding AlbumName}"
+                               AlbumArtData="{Binding AlbumArtData}"
+                               Margin="12,8,12,0" />
+
+        <!-- Transport controls + progress bar -->
+        <ctrl:TransportControl Grid.Row="3"
+                               x:Name="Transport"
+                               IsPlaying="{Binding IsPlaying}"
+                               Position="{Binding Position}"
+                               Duration="{Binding Duration}"
+                               ElapsedText="{Binding ElapsedText}"
+                               DurationText="{Binding DurationText}"
+                               PlayPauseCommand="{Binding PlayPauseCommand}"
+                               NextCommand="{Binding NextCommand}"
+                               PreviousCommand="{Binding PreviousCommand}"
+                               Margin="12,8,12,12" />
+
+      </Grid>
+    </Border>
+
+    <!-- ── Settings overlay — floats above main frame ───────────────────────── -->
+    <panels:SettingsPanel
+        DataContext="{Binding Settings}"
+        IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen}"
+        HorizontalAlignment="Right"
+        VerticalAlignment="Top"
+        Width="230"
+        Margin="0,42,8,0"
+        ZIndex="100" />
+
+    <!-- ── Status strip at bottom ───────────────────────────────────────────── -->
+    <TextBlock Text="{Binding StatusMessage}"
+               Foreground="{DynamicResource ThemeTextSecondary}"
+               FontSize="9"
+               TextAlignment="Center"
+               HorizontalAlignment="Stretch"
+               VerticalAlignment="Bottom"
+               Margin="8,0,8,8"
+               IsVisible="{Binding StatusMessage,
+                           Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+  </Panel>
+
+</Window>
