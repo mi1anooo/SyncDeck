@@ -1,0 +1,17 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SyncDeck.App"
+             RequestedThemeVariant="Dark">
+
+  <Application.Styles>
+    <!-- Base Avalonia Fluent theme (dark mode) -->
+    <FluentTheme />
+  </Application.Styles>
+
+  <!--
+    SyncDeck theme resource dictionaries are loaded dynamically at runtime
+    by ThemeManager — they are NOT included statically here.
+    See Themes/ThemeManager.cs for details.
+  -->
+
+</Application>
