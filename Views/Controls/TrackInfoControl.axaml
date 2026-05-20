@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SyncDeck.Views.Controls.TrackInfoControl">
+
+  <Grid ColumnDefinitions="64,*">
+
+    <!-- Album art placeholder / image -->
+    <Border Grid.Column="0"
+            Width="56" Height="56"
+            CornerRadius="{DynamicResource ThemeInnerCorner}"
+            BorderBrush="{DynamicResource ThemeFrameBorder}"
+            BorderThickness="1"
+            ClipToBounds="True"
+            Background="{DynamicResource ThemeSurfaceSecondary}"
+            HorizontalAlignment="Left">
+      <!-- AlbumArtPlaceholder is injected here in code-behind via x:Name -->
+      <Canvas x:Name="ArtCanvas"
+              Width="56" Height="56" />
+    </Border>
+
+    <!-- Track text panel -->
+    <StackPanel Grid.Column="1"
+                VerticalAlignment="Center"
+                Margin="8,0,0,0"
+                Spacing="3">
+
+      <TextBlock Text="NOW PLAYING"
+                 FontSize="8"
+                 FontWeight="Bold"
+                 LetterSpacing="1.5"
+                 Foreground="{DynamicResource ThemeTextSecondary}" />
+
+      <!-- Clip region for marquee scroll -->
+      <Border ClipToBounds="True" Height="20">
+        <TextBlock x:Name="TitleLabel"
+                   FontSize="13"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource ThemeTextLcd}"
+                   FontFamily="Consolas,Courier New,monospace"
+                   TextTrimming="None"
+                   TextWrapping="NoWrap"
+                   VerticalAlignment="Center" />
+      </Border>
+
+      <TextBlock x:Name="ArtistLabel"
+                 FontSize="10"
+                 Foreground="{DynamicResource ThemeTextSecondary}"
+                 TextTrimming="CharacterEllipsis" />
+
+    </StackPanel>
+  </Grid>
+</UserControl>

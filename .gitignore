@@ -1,0 +1,17 @@
+## .NET
+bin/
+obj/
+*.user
+.vs/
+publish/
+
+## Secrets — never commit
+appsettings.local.json
+*.env
+secrets.json
+
+## macOS
+.DS_Store
+
+## Rider
+.idea/

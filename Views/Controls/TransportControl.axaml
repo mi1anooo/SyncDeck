@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SyncDeck.Views.Controls.TransportControl">
+
+  <StackPanel Spacing="8">
+
+    <!-- ── Playback buttons ─────────────────────────────────────────────────── -->
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto,*"
+          HorizontalAlignment="Stretch">
+
+      <!-- Spacer -->
+      <Border Grid.Column="0" />
+
+      <!-- Previous -->
+      <Button Grid.Column="1"
+              x:Name="PrevBtn"
+              Classes="transport"
+              ToolTip.Tip="Previous">
+        <Canvas Width="18" Height="18">
+          <!-- Left-pointing triangle -->
+          <Polygon Points="14,2 4,9 14,16"
+                   Fill="{DynamicResource ThemeTextPrimary}" />
+          <!-- Stop bar -->
+          <Rectangle Canvas.Left="2" Canvas.Top="2" Width="2" Height="14"
+                     Fill="{DynamicResource ThemeAccentPrimary}" />
+        </Canvas>
+      </Button>
+
+      <!-- Play / Pause -->
+      <Button Grid.Column="2"
+              x:Name="PlayPauseBtn"
+              Classes="transport"
+              Width="52" Height="52"
+              Margin="8,0">
+        <Border Width="42" Height="42"
+                CornerRadius="21"
+                Background="{DynamicResource ThemeAccentPrimary}"
+                BorderBrush="{DynamicResource ThemeAccentSecondary}"
+                BorderThickness="1.5">
+          <!-- Play icon (shown when paused) -->
+          <Canvas x:Name="PlayIcon" Width="16" Height="18"
+                  HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Polygon Points="2,0 16,9 2,18"
+                     Fill="{DynamicResource ThemeBackground}" />
+          </Canvas>
+        </Border>
+      </Button>
+
+      <!-- Next -->
+      <Button Grid.Column="3"
+              x:Name="NextBtn"
+              Classes="transport"
+              ToolTip.Tip="Next">
+        <Canvas Width="18" Height="18">
+          <Polygon Points="4,2 14,9 4,16"
+                   Fill="{DynamicResource ThemeTextPrimary}" />
+          <Rectangle Canvas.Left="14" Canvas.Top="2" Width="2" Height="14"
+                     Fill="{DynamicResource ThemeAccentPrimary}" />
+        </Canvas>
+      </Button>
+
+      <!-- Spacer -->
+      <Border Grid.Column="4" />
+    </Grid>
+
+    <!-- ── Progress area ────────────────────────────────────────────────────── -->
+    <Grid ColumnDefinitions="36,*,36">
+
+      <!-- Elapsed -->
+      <TextBlock Grid.Column="0"
+                 x:Name="ElapsedLabel"
+                 FontSize="9"
+                 FontFamily="Consolas, Courier New"
+                 Foreground="{DynamicResource ThemeTextLcd}"
+                 VerticalAlignment="Center"
+                 TextAlignment="Left" />
+
+      <!-- Custom progress bar -->
+      <Canvas Grid.Column="1"
+              x:Name="ProgressCanvas"
+              Height="20"
+              HorizontalAlignment="Stretch" />
+
+      <!-- Duration -->
+      <TextBlock Grid.Column="2"
+                 x:Name="DurationLabel"
+                 FontSize="9"
+                 FontFamily="Consolas, Courier New"
+                 Foreground="{DynamicResource ThemeTextSecondary}"
+                 VerticalAlignment="Center"
+                 TextAlignment="Right" />
+    </Grid>
+
+  </StackPanel>
+</UserControl>
