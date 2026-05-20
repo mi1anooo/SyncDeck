@@ -51,7 +51,7 @@ public partial class TrackInfoControl : UserControl
             TitleLabel.Text = change.NewValue as string ?? "";
             _scrollX = 0;
             TitleLabel.RenderTransform = new TranslateTransform(0, 0);
-            Dispatcher.UIThread.Post(CheckMarquee, DispatcherPriority.Layout);
+            Dispatcher.UIThread.Post(CheckMarquee, DispatcherPriority.Render);
         }
         else if (change.Property == ArtistProperty)
         {
