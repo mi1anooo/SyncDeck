@@ -38,7 +38,7 @@ public class MockMusicProvider : IMusicProvider, IDisposable
     private bool   _playing  = false;
     private bool   _shuffle  = false;
 
-    private readonly Timer  _timer  = new(1000) { AutoReset = true };
+    private readonly System.Timers.Timer _timer = new(1000) { AutoReset = true };
     private readonly Random _rng    = new();
 
     // ── IMusicProvider ────────────────────────────────────────────────────────
