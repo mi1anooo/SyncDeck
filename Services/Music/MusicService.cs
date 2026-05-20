@@ -48,6 +48,8 @@ public class MusicService : IMusicService
             _             => _mock,
         };
         Subscribe(_active);
+
+        _ = RefreshActiveStateAsync();
     }
 
     // ── Event forwarding ──────────────────────────────────────────────────────
@@ -69,6 +71,21 @@ public class MusicService : IMusicService
     private void OnTrackChanged        (object? s, Track? t) => TrackChanged.Invoke(s, t);
     private void OnPlaybackStateChanged(object? s, bool   v) => PlaybackStateChanged.Invoke(s, v);
     private void OnProgressChanged     (object? s, double v) => ProgressChanged.Invoke(s, v);
+
+    private async Task RefreshActiveStateAsync()
+    {
+        try
+        {
+            var track = await _active.GetCurrentTrackAsync();
+            TrackChanged.Invoke(this, track);
+            PlaybackStateChanged.Invoke(this, _active.IsPlaying);
+            ProgressChanged.Invoke(this, await _active.GetProgressAsync());
+        }
+        catch
+        {
+            // Provider might not be connected yet. The UI should stay alive.
+        }
+    }
 
     // ── Proxy to active provider ──────────────────────────────────────────────
 

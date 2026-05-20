@@ -5,7 +5,7 @@ namespace SyncDeck.Utilities;
 
 public static class SingleInstanceManager
 {
-    private const string MutexName = "Global\\SyncDeck_SingleInstance_A3F1";
+    private const string MutexName = "Local\\SyncDeck_SingleInstance_A3F1";
 
     public static Mutex AcquireMutex(out bool createdNew)
     {

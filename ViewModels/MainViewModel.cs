@@ -126,13 +126,22 @@ public partial class MainViewModel : ObservableObject
 
     private async Task LoadCurrentTrackAsync()
     {
-        var track = await _music.GetCurrentTrackAsync();
-        ApplyTrack(track);
+        try
+        {
+            var track = await _music.GetCurrentTrackAsync();
+            ApplyTrack(track);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+            ApplyTrack(Track.Empty);
+        }
     }
 
     private void ApplyTrack(Track? track)
     {
-        if (track is null) return;
+        track ??= Track.Empty;
+
         TrackTitle   = track.Title;
         Artist       = track.Artist;
         AlbumName    = track.Album;

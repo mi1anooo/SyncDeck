@@ -4,12 +4,15 @@ on:
   push:
     branches: [ main ]
 
+  workflow_dispatch:
+
 jobs:
   build-windows:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
@@ -23,10 +26,13 @@ jobs:
         run: dotnet build -c Release --no-restore
 
       - name: Publish Windows
-        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o ./publish
+
+      - name: Show publish output
+        run: dir ./publish
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SyncDeck-Windows
-          path: ./publish/SyncDeck.exe
+          path: ./publish/**

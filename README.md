@@ -228,18 +228,42 @@ instantly without reloading or freezing.
 ## Apple Music Notes (Milestone 3)
 
 Apple Music does not offer a cross-platform playback-control API equivalent to
-Spotify's Web API. Current options per platform:
+Spotify's Web API. SyncDeck now uses local desktop control instead:
 
 | Platform | Approach | Status in SyncDeck |
 |----------|----------|-------------------|
-| macOS    | AppleScript → `osascript` → Music.app | TODO in `AppleMusicProvider.cs` |
-| Windows  | iTunes COM interop | TODO in `AppleMusicProvider.cs` |
-| Cross-platform | MusicKit JS (browser only) | Not applicable |
+| macOS    | AppleScript → `osascript` → Music.app | Implemented |
+| Windows  | iTunes COM interop | Implemented for legacy iTunes |
+| Cross-platform | MusicKit JS / Apple Music API | Deferred |
 
-The `AppleMusicProvider` class is a documented stub. The interface is wired
-so switching to "Apple Music" in settings works — it just shows "Not implemented"
-errors. A future contributor can add the platform-specific backends inside the
-provider without changing any other code.
+### macOS setup
+
+No Apple Music login is required inside SyncDeck. Sign into Music.app normally,
+then open Settings → select **Apple Music** → click **Connect Apple Music**.
+macOS may ask for Automation permission so SyncDeck can control Music.app.
+If building a `.app` bundle, include `setup/macos/Info.plist`, which contains
+`NSAppleEventsUsageDescription`.
+
+### Windows setup
+
+Windows Apple Music support currently targets the legacy iTunes desktop app
+through COM automation. The newer Apple Music app for Windows is not used yet.
+Install and sign into iTunes, then open Settings → select **Apple Music** →
+click **Connect Apple Music**. If iTunes is not installed or COM automation is
+unavailable, SyncDeck shows **Apple Music app/iTunes not detected** instead of
+crashing.
+
+### Current Apple Music limitations
+
+| Feature | Status |
+|---------|--------|
+| Play / pause | Supported |
+| Skip / previous | Supported |
+| Seek | Supported |
+| Current track polling | Supported every 1 second |
+| Album art | Not implemented yet |
+| Playlist browsing | Deferred |
+| MusicKit API | Deferred for later catalogue/library work |
 
 ---
 

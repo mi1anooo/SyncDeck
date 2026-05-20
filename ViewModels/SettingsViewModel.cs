@@ -50,29 +50,57 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task SpotifyLoginAsync()
     {
+        ForceProvider("Spotify", "Spotify");
+
         try
         {
             if (IsSpotifyLoggedIn)
             {
                 await _music.LogoutAsync();
-                IsSpotifyLoggedIn  = false;
-                SpotifyStatusText  = "Log in to Spotify";
+                IsSpotifyLoggedIn = false;
+                SpotifyStatusText = "Log in to Spotify";
             }
             else
             {
                 await _music.LoginAsync();
-                IsSpotifyLoggedIn  = true;
-                SpotifyStatusText  = "Log out of Spotify";
+                IsSpotifyLoggedIn = true;
+                SpotifyStatusText = "Log out of Spotify";
             }
         }
         catch (Exception ex) { SpotifyStatusText = $"Error: {ex.Message}"; }
     }
 
     [RelayCommand]
-    private Task AppleMusicConnectAsync()
+    private async Task AppleMusicConnectAsync()
     {
-        AppleStatusText = "Apple Music: see README for platform notes.";
-        return Task.CompletedTask;
+        ForceProvider("Apple Music", "AppleMusic");
+
+        try
+        {
+            await _music.LoginAsync();
+            AppleStatusText = OperatingSystem.IsMacOS()
+                ? "Apple Music connected"
+                : "iTunes connected";
+            await RefreshPlaylistsAsync();
+        }
+        catch (Exception ex)
+        {
+            AppleStatusText = ex.Message;
+        }
+    }
+
+    private void ForceProvider(string displayName, string providerKey)
+    {
+        if (SelectedSource != displayName)
+        {
+            SelectedSource = displayName;
+        }
+        else
+        {
+            _music.SwitchProvider(providerKey);
+            _persisted.CurrentProvider = providerKey;
+            SettingsService.Save(_persisted);
+        }
     }
 
     // ── Playlists ─────────────────────────────────────────────────────────────
@@ -147,6 +175,8 @@ public partial class SettingsViewModel : ObservableObject
         _alwaysOnTop = _persisted.AlwaysOnTop;
         _transparent = _persisted.Transparent;
         _shuffle     = _persisted.Shuffle;
+
+        _music.SwitchProvider(_persisted.CurrentProvider);
 
         _ = RefreshPlaylistsAsync();
     }
