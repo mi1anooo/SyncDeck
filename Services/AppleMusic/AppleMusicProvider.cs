@@ -12,41 +12,44 @@ using Timer = System.Timers.Timer;
 namespace SyncDeck.Services.AppleMusic;
 
 /// <summary>
-/// Local Apple Music controller.
+/// Local Apple Music / iTunes controller.
 ///
-/// macOS: controls Music.app through AppleScript / osascript.
-/// Windows: controls legacy iTunes through COM automation.
+/// macOS  → AppleScript (osascript) against Music.app
+/// Windows → COM automation against iTunes.Application
 ///
-/// This intentionally does not use MusicKit yet. MusicKit can be added later
-/// for catalogue/library features, but it is not a Spotify-style desktop
-/// playback-control API.
+/// Playlist playback fix (Windows):
+///   PlayFirstTrack() is an IITUserPlaylist method and is NOT available on all
+///   playlist types (smart playlists, library, etc.). We now use a multi-step
+///   fallback: PlayFirstTrack → iterate tracks and Play the first one → Play()
+///   on the iTunes app itself after setting the playlist as the current source.
 /// </summary>
 public class AppleMusicProvider : IMusicProvider, IDisposable
 {
-    private const string Separator = "\u001F";
-    private const string NotDetectedMessage = "Apple Music app/iTunes not detected.";
+    private const string Separator        = "\u001F";
+    private const string NotDetectedMsg   = "Apple Music app/iTunes not detected.";
 
     private readonly Timer _poll = new(1_000) { AutoReset = true };
-    private int _isPolling;
-
+    private int    _isPolling;
     private Track? _current;
     private double _position;
-    private bool _playing;
-    private bool _connected;
+    private bool   _playing;
+    private bool   _connected;
     private object? _itunes;
 
-    public string ProviderName => "Apple Music";
-    public bool IsAuthenticated => _connected;
-    public bool IsPlaying => _playing;
+    public string ProviderName    => "Apple Music";
+    public bool   IsAuthenticated => _connected;
+    public bool   IsPlaying       => _playing;
 
-    public event EventHandler<Track?> TrackChanged = delegate { };
-    public event EventHandler<bool> PlaybackStateChanged = delegate { };
-    public event EventHandler<double> ProgressChanged = delegate { };
+    public event EventHandler<Track?>  TrackChanged         = delegate { };
+    public event EventHandler<bool>    PlaybackStateChanged = delegate { };
+    public event EventHandler<double>  ProgressChanged      = delegate { };
 
     public AppleMusicProvider()
     {
         _poll.Elapsed += async (_, _) => await SafePollAsync();
     }
+
+    // ── Auth ─────────────────────────────────────────────────────────────────
 
     public async Task LoginAsync()
     {
@@ -56,13 +59,9 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
         try
         {
             if (OperatingSystem.IsMacOS())
-            {
                 await RunAppleScriptAsync("tell application \"Music\" to launch");
-            }
             else
-            {
                 EnsureITunes();
-            }
 
             _connected = true;
             _poll.Start();
@@ -80,54 +79,48 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
     {
         _poll.Stop();
         _connected = false;
-        _playing = false;
-        _position = 0;
+        _playing   = false;
+        _position  = 0;
         PlaybackStateChanged.Invoke(this, false);
         ProgressChanged.Invoke(this, 0);
         return Task.CompletedTask;
     }
 
+    // ── Playback ─────────────────────────────────────────────────────────────
+
     public async Task<Track?> GetCurrentTrackAsync()
     {
-        if (_connected)
-            await SafePollAsync();
-
+        if (_connected) await SafePollAsync();
         return _current ?? Track.Empty;
     }
 
     public async Task PlayAsync()
     {
         await EnsureConnectedAsync();
-
         if (OperatingSystem.IsMacOS())
             await RunAppleScriptAsync("tell application \"Music\" to play");
         else
             InvokeITunes("Play");
-
         await SafePollAsync();
     }
 
     public async Task PauseAsync()
     {
         await EnsureConnectedAsync();
-
         if (OperatingSystem.IsMacOS())
             await RunAppleScriptAsync("tell application \"Music\" to pause");
         else
             InvokeITunes("Pause");
-
         await SafePollAsync();
     }
 
     public async Task NextAsync()
     {
         await EnsureConnectedAsync();
-
         if (OperatingSystem.IsMacOS())
             await RunAppleScriptAsync("tell application \"Music\" to next track");
         else
             InvokeITunes("NextTrack");
-
         await Task.Delay(300);
         await SafePollAsync();
     }
@@ -135,12 +128,10 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
     public async Task PreviousAsync()
     {
         await EnsureConnectedAsync();
-
         if (OperatingSystem.IsMacOS())
             await RunAppleScriptAsync("tell application \"Music\" to previous track");
         else
             InvokeITunes("PreviousTrack");
-
         await Task.Delay(300);
         await SafePollAsync();
     }
@@ -148,49 +139,35 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
     public async Task SeekAsync(double positionSeconds)
     {
         await EnsureConnectedAsync();
-        var safePosition = Math.Max(0, positionSeconds);
-
+        var safe = Math.Max(0, positionSeconds);
         if (OperatingSystem.IsMacOS())
-        {
-            var script = $"tell application \"Music\" to set player position to {safePosition.ToString(CultureInfo.InvariantCulture)}";
-            await RunAppleScriptAsync(script);
-        }
+            await RunAppleScriptAsync($"tell application \"Music\" to set player position to {safe.ToString(CultureInfo.InvariantCulture)}");
         else
-        {
-            SetITunesProperty("PlayerPosition", safePosition);
-        }
-
-        _position = safePosition;
+            SetITunesProperty("PlayerPosition", safe);
+        _position = safe;
         ProgressChanged.Invoke(this, _position);
     }
 
     public Task<double> GetProgressAsync() => Task.FromResult(_position);
 
+    // ── Playlists ─────────────────────────────────────────────────────────────
+
     public async Task<List<Playlist>> GetPlaylistsAsync()
     {
         await EnsureConnectedAsync();
-
         try
         {
-            return OperatingSystem.IsMacOS()
-                ? await GetMacPlaylistsAsync()
-                : OperatingSystem.IsWindows()
-                    ? GetWindowsPlaylists()
-                    : new List<Playlist>();
+            return OperatingSystem.IsMacOS()  ? await GetMacPlaylistsAsync()
+                 : OperatingSystem.IsWindows() ? GetWindowsPlaylists()
+                 : new List<Playlist>();
         }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(MapFriendlyError(ex), ex);
-        }
+        catch (Exception ex) { throw new InvalidOperationException(MapFriendlyError(ex), ex); }
     }
 
     public async Task SetPlaylistAsync(string playlistId)
     {
-        if (string.IsNullOrWhiteSpace(playlistId))
-            return;
-
+        if (string.IsNullOrWhiteSpace(playlistId)) return;
         await EnsureConnectedAsync();
-
         try
         {
             if (OperatingSystem.IsMacOS())
@@ -198,13 +175,10 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
             else if (OperatingSystem.IsWindows())
                 PlayWindowsPlaylist(playlistId);
 
-            await Task.Delay(300);
+            await Task.Delay(400);
             await SafePollAsync();
         }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(MapFriendlyError(ex), ex);
-        }
+        catch (Exception ex) { throw new InvalidOperationException(MapFriendlyError(ex), ex); }
     }
 
     public async Task SetShuffleAsync(bool enabled)
@@ -212,121 +186,86 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
         try
         {
             await EnsureConnectedAsync();
-
             if (OperatingSystem.IsMacOS())
-            {
-                var value = enabled ? "true" : "false";
-                await RunAppleScriptAsync($"tell application \"Music\" to set shuffle enabled to {value}");
-            }
+                await RunAppleScriptAsync($"tell application \"Music\" to set shuffle enabled to {(enabled ? "true" : "false")}");
             else
-            {
                 SetITunesProperty("ShuffleEnabled", enabled);
-            }
         }
-        catch
-        {
-            // Shuffle support varies across Music.app/iTunes versions.
-            // Keep this non-fatal because SettingsViewModel fires it in the background.
-        }
+        catch { /* non-fatal */ }
     }
 
     private async Task EnsureConnectedAsync()
     {
-        if (!_connected)
-            await LoginAsync();
+        if (!_connected) await LoginAsync();
     }
+
+    // ── Polling ───────────────────────────────────────────────────────────────
 
     private async Task SafePollAsync()
     {
-        if (Interlocked.Exchange(ref _isPolling, 1) == 1)
-            return;
-
+        if (Interlocked.Exchange(ref _isPolling, 1) == 1) return;
         try
         {
-            var state = OperatingSystem.IsMacOS()
-                ? await ReadMacStateAsync()
-                : OperatingSystem.IsWindows()
-                    ? ReadWindowsState()
-                    : ApplePlaybackState.Unavailable("Apple Music local control is only supported on macOS and Windows.");
-
+            var state = OperatingSystem.IsMacOS()  ? await ReadMacStateAsync()
+                      : OperatingSystem.IsWindows() ? ReadWindowsState()
+                      : ApplePlaybackState.Unavailable("Apple Music local control is only supported on macOS and Windows.");
             ApplyState(state);
         }
-        catch (Exception ex)
-        {
-            ApplyState(ApplePlaybackState.Unavailable(MapFriendlyError(ex)));
-        }
-        finally
-        {
-            Interlocked.Exchange(ref _isPolling, 0);
-        }
+        catch (Exception ex) { ApplyState(ApplePlaybackState.Unavailable(MapFriendlyError(ex))); }
+        finally { Interlocked.Exchange(ref _isPolling, 0); }
     }
 
     private void ApplyState(ApplePlaybackState state)
     {
-        if (!state.IsAvailable)
-        {
-            SetUnavailable(state.ErrorMessage ?? NotDetectedMessage);
-            return;
-        }
+        if (!state.IsAvailable) { SetUnavailable(state.ErrorMessage ?? NotDetectedMsg); return; }
 
-        var oldTrackId = _current?.Id;
+        var oldId      = _current?.Id;
         var wasPlaying = _playing;
 
-        _current = state.Track ?? Track.Empty;
+        _current  = state.Track ?? Track.Empty;
         _position = Math.Max(0, state.PositionSeconds);
-        _playing = state.IsPlaying;
+        _playing  = state.IsPlaying;
 
-        if (oldTrackId != _current.Id)
-            TrackChanged.Invoke(this, _current);
-
-        if (wasPlaying != _playing)
-            PlaybackStateChanged.Invoke(this, _playing);
-
+        if (oldId != _current.Id)  TrackChanged.Invoke(this, _current);
+        if (wasPlaying != _playing) PlaybackStateChanged.Invoke(this, _playing);
         ProgressChanged.Invoke(this, _position);
     }
 
     private void SetUnavailable(string message)
     {
         var wasPlaying = _playing;
-        var previousId = _current?.Id;
+        var prevId     = _current?.Id;
 
-        _playing = false;
+        _playing  = false;
         _position = 0;
-        _current = new Track
+        _current  = new Track
         {
-            Id = "apple-unavailable",
-            Title = message,
+            Id     = "apple-unavailable",
+            Title  = message,
             Artist = "Open Music.app on macOS or install iTunes on Windows.",
-            Album = "",
+            Album  = "",
             Duration = TimeSpan.Zero
         };
 
-        if (previousId != _current.Id)
-            TrackChanged.Invoke(this, _current);
-
-        if (wasPlaying)
-            PlaybackStateChanged.Invoke(this, false);
-
+        if (prevId != _current.Id) TrackChanged.Invoke(this, _current);
+        if (wasPlaying)            PlaybackStateChanged.Invoke(this, false);
         ProgressChanged.Invoke(this, 0);
     }
 
-    // ── macOS / AppleScript ──────────────────────────────────────────────────
+    // ── macOS / AppleScript ───────────────────────────────────────────────────
 
     private static async Task<ApplePlaybackState> ReadMacStateAsync()
     {
-        var script = $$"""
+        var script = """
         if application "Music" is not running then
             return "NOT_RUNNING"
         end if
-
         tell application "Music"
             set d to ASCII character 31
             set stateText to player state as string
-
             if stateText is "stopped" then
                 return "STOPPED" & d & "" & d & "" & d & "" & d & "0" & d & "0" & d & stateText
             end if
-
             try
                 set t to current track
                 set trackId to ""
@@ -335,7 +274,6 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
                 set albumName to ""
                 set durationSeconds to 0
                 set positionSeconds to player position
-
                 try
                     set trackId to persistent ID of t as string
                 end try
@@ -351,7 +289,6 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
                 try
                     set durationSeconds to duration of t
                 end try
-
                 return trackId & d & trackName & d & artistName & d & albumName & d & (durationSeconds as string) & d & (positionSeconds as string) & d & stateText
             on error
                 return "STOPPED" & d & "" & d & "" & d & "" & d & "0" & d & "0" & d & stateText
@@ -361,7 +298,7 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
 
         var output = await RunAppleScriptAsync(script);
         if (string.IsNullOrWhiteSpace(output) || output.StartsWith("NOT_RUNNING", StringComparison.OrdinalIgnoreCase))
-            return ApplePlaybackState.Unavailable(NotDetectedMessage);
+            return ApplePlaybackState.Unavailable(NotDetectedMsg);
 
         var parts = output.Split(Separator);
         if (parts.Length < 7 || parts[0].Equals("STOPPED", StringComparison.OrdinalIgnoreCase))
@@ -369,381 +306,335 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
 
         var duration = ParseDouble(parts[4]);
         var position = ParseDouble(parts[5]);
-        var stateText = parts[6];
-
         var track = new Track
         {
-            Id = string.IsNullOrWhiteSpace(parts[0]) ? $"apple-{parts[1]}-{parts[2]}-{parts[3]}" : parts[0],
-            Title = string.IsNullOrWhiteSpace(parts[1]) ? "Unknown Track" : parts[1],
-            Artist = string.IsNullOrWhiteSpace(parts[2]) ? "Unknown Artist" : parts[2],
-            Album = parts[3],
+            Id       = string.IsNullOrWhiteSpace(parts[0]) ? $"apple-{parts[1]}-{parts[2]}" : parts[0],
+            Title    = string.IsNullOrWhiteSpace(parts[1]) ? "Unknown Track"  : parts[1],
+            Artist   = string.IsNullOrWhiteSpace(parts[2]) ? "Unknown Artist" : parts[2],
+            Album    = parts[3],
             Duration = TimeSpan.FromSeconds(Math.Max(0, duration))
         };
-
-        return ApplePlaybackState.Available(track, position, stateText.Equals("playing", StringComparison.OrdinalIgnoreCase));
+        return ApplePlaybackState.Available(track, position,
+            parts[6].Equals("playing", StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task<string> RunAppleScriptAsync(string script)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo
+        using var process = new Process
         {
-            FileName = "osascript",
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
+            StartInfo = new ProcessStartInfo
+            {
+                FileName             = "osascript",
+                RedirectStandardInput  = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                UseShellExecute      = false,
+                CreateNoWindow       = true
+            }
         };
-
-        try
-        {
-            process.Start();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(NotDetectedMessage, ex);
-        }
+        try { process.Start(); }
+        catch (Exception ex) { throw new InvalidOperationException(NotDetectedMsg, ex); }
 
         await process.StandardInput.WriteAsync(script);
         process.StandardInput.Close();
-
         var output = await process.StandardOutput.ReadToEndAsync();
-        var error = await process.StandardError.ReadToEndAsync();
+        var error  = await process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
 
         if (process.ExitCode != 0)
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? NotDetectedMessage : error.Trim());
-
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? NotDetectedMsg : error.Trim());
         return output.Trim();
     }
 
     private static async Task<List<Playlist>> GetMacPlaylistsAsync()
     {
-        var script = $$"""
-        if application "Music" is not running then
-            return "NOT_RUNNING"
-        end if
-
+        var script = """
+        if application "Music" is not running then return "NOT_RUNNING"
         tell application "Music"
             set d to ASCII character 31
             set r to ASCII character 30
             set output to ""
-
             repeat with p in user playlists
                 try
                     set playlistName to name of p as string
                     set playlistId to persistent ID of p as string
                     set trackCount to count of tracks of p
-
                     if playlistName is not "" then
                         set output to output & playlistId & d & playlistName & d & (trackCount as string) & r
                     end if
                 end try
             end repeat
-
             return output
         end tell
         """;
-
         var output = await RunAppleScriptAsync(script);
         if (string.IsNullOrWhiteSpace(output) || output.StartsWith("NOT_RUNNING", StringComparison.OrdinalIgnoreCase))
             return new List<Playlist>();
-
         return ParsePlaylistRows(output, "music");
     }
 
     private static async Task PlayMacPlaylistAsync(string playlistId)
     {
-        var id = playlistId.StartsWith("music:", StringComparison.OrdinalIgnoreCase)
-            ? playlistId[6..]
-            : playlistId;
-
+        var id     = playlistId.StartsWith("music:", StringComparison.OrdinalIgnoreCase) ? playlistId[6..] : playlistId;
         var safeId = EscapeAppleScriptString(id);
-        var script = $$"""
+        var script = $"""
         tell application "Music"
             set targetPlaylist to missing value
-
             repeat with p in user playlists
                 try
-                    if (persistent ID of p as string) is "{{safeId}}" then
+                    if (persistent ID of p as string) is "{safeId}" then
                         set targetPlaylist to p
                         exit repeat
                     end if
                 end try
             end repeat
-
             if targetPlaylist is missing value then
                 error "Playlist not found."
             end if
-
             play targetPlaylist
         end tell
         """;
-
         await RunAppleScriptAsync(script);
     }
 
-    // ── Windows / iTunes COM ─────────────────────────────────────────────────
+    // ── Windows / iTunes COM ──────────────────────────────────────────────────
 
     private ApplePlaybackState ReadWindowsState()
     {
         try
         {
             EnsureITunes();
-            var app = _itunes!;
+            var app          = _itunes!;
             var currentTrack = GetITunesProperty(app, "CurrentTrack");
-            var playerState = Convert.ToInt32(GetITunesProperty(app, "PlayerState"), CultureInfo.InvariantCulture);
-            var position = Convert.ToDouble(GetITunesProperty(app, "PlayerPosition") ?? 0, CultureInfo.InvariantCulture);
-            var isPlaying = playerState == 1;
+            var playerState  = Convert.ToInt32(GetITunesProperty(app, "PlayerState"), CultureInfo.InvariantCulture);
+            var position     = Convert.ToDouble(GetITunesProperty(app, "PlayerPosition") ?? 0.0, CultureInfo.InvariantCulture);
+            var isPlaying    = playerState == 1;
 
             if (currentTrack is null)
                 return ApplePlaybackState.Available(Track.Empty, position, isPlaying);
 
-            var title = Convert.ToString(TryGetITunesProperty(currentTrack, "Name"), CultureInfo.InvariantCulture) ?? "Unknown Track";
-            var artist = Convert.ToString(TryGetITunesProperty(currentTrack, "Artist"), CultureInfo.InvariantCulture) ?? "Unknown Artist";
-            var album = Convert.ToString(TryGetITunesProperty(currentTrack, "Album"), CultureInfo.InvariantCulture) ?? "";
-            var duration = Convert.ToDouble(TryGetITunesProperty(currentTrack, "Duration") ?? 0, CultureInfo.InvariantCulture);
-            var id = Convert.ToString(TryGetITunesProperty(currentTrack, "TrackDatabaseID"), CultureInfo.InvariantCulture);
+            var title    = Convert.ToString(TryGet(currentTrack, "Name"),             CultureInfo.InvariantCulture) ?? "Unknown Track";
+            var artist   = Convert.ToString(TryGet(currentTrack, "Artist"),           CultureInfo.InvariantCulture) ?? "Unknown Artist";
+            var album    = Convert.ToString(TryGet(currentTrack, "Album"),            CultureInfo.InvariantCulture) ?? "";
+            var duration = Convert.ToDouble(TryGet(currentTrack, "Duration") ?? 0.0, CultureInfo.InvariantCulture);
+            var id       = Convert.ToString(TryGet(currentTrack, "TrackDatabaseID"), CultureInfo.InvariantCulture);
 
             var track = new Track
             {
-                Id = string.IsNullOrWhiteSpace(id) ? $"itunes-{title}-{artist}-{album}" : id,
-                Title = string.IsNullOrWhiteSpace(title) ? "Unknown Track" : title,
-                Artist = string.IsNullOrWhiteSpace(artist) ? "Unknown Artist" : artist,
-                Album = album,
+                Id       = string.IsNullOrWhiteSpace(id) ? $"itunes-{title}-{artist}" : id,
+                Title    = string.IsNullOrWhiteSpace(title)  ? "Unknown Track"  : title,
+                Artist   = string.IsNullOrWhiteSpace(artist) ? "Unknown Artist" : artist,
+                Album    = album,
                 Duration = TimeSpan.FromSeconds(Math.Max(0, duration))
             };
-
             return ApplePlaybackState.Available(track, position, isPlaying);
         }
-        catch (Exception ex)
-        {
-            return ApplePlaybackState.Unavailable(MapFriendlyError(ex));
-        }
+        catch (Exception ex) { return ApplePlaybackState.Unavailable(MapFriendlyError(ex)); }
     }
 
     private List<Playlist> GetWindowsPlaylists()
     {
         EnsureITunes();
-
         var results = new List<Playlist>();
         var sources = GetITunesProperty(_itunes!, "Sources");
-        var sourceCount = Convert.ToInt32(TryGetITunesProperty(sources!, "Count") ?? 0, CultureInfo.InvariantCulture);
+        var sourceCount = Convert.ToInt32(TryGet(sources!, "Count") ?? 0, CultureInfo.InvariantCulture);
 
-        for (var sourceIndex = 1; sourceIndex <= sourceCount; sourceIndex++)
+        for (var si = 1; si <= sourceCount; si++)
         {
-            var source = GetCollectionItem(sources!, sourceIndex);
-            var playlists = TryGetITunesProperty(source!, "Playlists");
+            var source    = CollectionItem(sources!, si);
+            var playlists = TryGet(source!, "Playlists");
             if (playlists is null) continue;
 
-            var playlistCount = Convert.ToInt32(TryGetITunesProperty(playlists, "Count") ?? 0, CultureInfo.InvariantCulture);
-            for (var playlistIndex = 1; playlistIndex <= playlistCount; playlistIndex++)
+            var plCount = Convert.ToInt32(TryGet(playlists, "Count") ?? 0, CultureInfo.InvariantCulture);
+            for (var pi = 1; pi <= plCount; pi++)
             {
                 try
                 {
-                    var playlist = GetCollectionItem(playlists, playlistIndex);
-                    if (playlist is null) continue;
-
-                    var name = Convert.ToString(TryGetITunesProperty(playlist, "Name"), CultureInfo.InvariantCulture) ?? "";
+                    var pl   = CollectionItem(playlists, pi);
+                    if (pl is null) continue;
+                    var name = Convert.ToString(TryGet(pl, "Name"), CultureInfo.InvariantCulture) ?? "";
                     if (string.IsNullOrWhiteSpace(name)) continue;
-
-                    var trackCount = GetITunesPlaylistTrackCount(playlist);
-                    if (trackCount <= 0) continue;
-
-                    results.Add(new Playlist
-                    {
-                        Id = $"itunes:{sourceIndex}:{playlistIndex}",
-                        Name = name,
-                        TrackCount = trackCount
-                    });
+                    var tc = ItunesTrackCount(pl);
+                    if (tc <= 0) continue;
+                    results.Add(new Playlist { Id = $"itunes:{si}:{pi}", Name = name, TrackCount = tc });
                 }
-                catch
-                {
-                    // Some special iTunes playlist types cannot be read consistently.
-                    // Ignore those rather than breaking the whole playlist picker.
-                }
+                catch { /* skip unreadable playlist types */ }
             }
         }
-
         return results;
     }
 
+    /// <summary>
+    /// Robust iTunes COM playlist playback.
+    /// Strategy:
+    ///   1. Get playlist object by stored source/playlist index.
+    ///   2. Try PlayFirstTrack() — works for IITUserPlaylist.
+    ///   3. If that fails, get Tracks collection, item(1), call Play() on that track.
+    ///   4. If still fails, call iTunes.Play() to resume whatever was last selected.
+    /// </summary>
     private void PlayWindowsPlaylist(string playlistId)
     {
         EnsureITunes();
 
         var parts = playlistId.Split(':');
-        if (parts.Length != 3 || !int.TryParse(parts[1], out var sourceIndex) || !int.TryParse(parts[2], out var playlistIndex))
+        if (parts.Length != 3
+            || !int.TryParse(parts[1], out var si)
+            || !int.TryParse(parts[2], out var pi))
             throw new InvalidOperationException("Invalid iTunes playlist id.");
 
-        var sources = GetITunesProperty(_itunes!, "Sources");
-        var source = GetCollectionItem(sources!, sourceIndex);
-        var playlists = TryGetITunesProperty(source!, "Playlists")
-            ?? throw new InvalidOperationException("No iTunes playlists were found.");
-        var playlist = GetCollectionItem(playlists, playlistIndex)
-            ?? throw new InvalidOperationException("Playlist not found.");
+        var sources   = GetITunesProperty(_itunes!, "Sources");
+        var source    = CollectionItem(sources!, si);
+        var playlists = TryGet(source!, "Playlists")
+                        ?? throw new InvalidOperationException("No iTunes playlists found.");
+        var playlist  = CollectionItem(playlists, pi)
+                        ?? throw new InvalidOperationException("Playlist not found.");
 
+        // ── Attempt 1: PlayFirstTrack() ───────────────────────────────────────
+        var attempt1Ok = false;
         try
         {
-            InvokeMember(playlist, "PlayFirstTrack", BindingFlags.InvokeMethod);
+            Invoke(playlist, "PlayFirstTrack", BindingFlags.InvokeMethod);
+            attempt1Ok = true;
         }
-        catch
+        catch { /* fall through */ }
+
+        if (attempt1Ok) return;
+
+        // ── Attempt 2: Get first track → Play() on the track object ───────────
+        var attempt2Ok = false;
+        try
         {
-            InvokeMember(_itunes!, "PlayPlaylist", BindingFlags.InvokeMethod, playlist);
+            var tracks = TryGet(playlist, "Tracks");
+            if (tracks is not null)
+            {
+                var firstTrack = CollectionItem(tracks, 1);
+                if (firstTrack is not null)
+                {
+                    Invoke(firstTrack, "Play", BindingFlags.InvokeMethod);
+                    attempt2Ok = true;
+                }
+            }
+        }
+        catch { /* fall through */ }
+
+        if (attempt2Ok) return;
+
+        // ── Attempt 3: Set playlist as selected source then call iTunes.Play() ──
+        try
+        {
+            // Try to set the current playlist property
+            _itunes!.GetType().InvokeMember("CurrentPlaylist",
+                BindingFlags.SetProperty, null, _itunes, new[] { playlist });
+        }
+        catch { /* property may be read-only on some versions */ }
+
+        // Last resort — just hit Play (will play whatever is current)
+        try { InvokeITunes("Play"); }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "Could not start iTunes playback. Make sure iTunes is open and a track is selected.", ex);
         }
     }
 
-    private static int GetITunesPlaylistTrackCount(object playlist)
+    private static int ItunesTrackCount(object playlist)
     {
         try
         {
-            var tracks = TryGetITunesProperty(playlist, "Tracks");
-            return Convert.ToInt32(TryGetITunesProperty(tracks!, "Count") ?? 0, CultureInfo.InvariantCulture);
+            var tracks = TryGet(playlist, "Tracks");
+            return Convert.ToInt32(TryGet(tracks!, "Count") ?? 0, CultureInfo.InvariantCulture);
         }
-        catch
-        {
-            return 0;
-        }
+        catch { return 0; }
     }
 
     private void EnsureITunes()
     {
-        if (_itunes is not null)
-            return;
-
-        var type = Type.GetTypeFromProgID("iTunes.Application");
-        if (type is null)
-            throw new InvalidOperationException(NotDetectedMessage);
-
+        if (_itunes is not null) return;
+        var type = Type.GetTypeFromProgID("iTunes.Application")
+                   ?? throw new InvalidOperationException(NotDetectedMsg);
         _itunes = Activator.CreateInstance(type)
-            ?? throw new InvalidOperationException(NotDetectedMessage);
+                  ?? throw new InvalidOperationException(NotDetectedMsg);
     }
 
-    private void InvokeITunes(string methodName, params object?[] args)
+    private void InvokeITunes(string method, params object?[] args)
     {
         EnsureITunes();
-        InvokeMember(_itunes!, methodName, BindingFlags.InvokeMethod, args);
+        Invoke(_itunes!, method, BindingFlags.InvokeMethod, args);
     }
 
-    private static object? InvokeMember(object target, string memberName, BindingFlags flags, params object?[] args)
-        => target.GetType().InvokeMember(memberName, flags, null, target, args.Length == 0 ? null : args);
+    private static object? Invoke(object target, string member, BindingFlags flags, params object?[] args)
+        => target.GetType().InvokeMember(member, flags, null, target, args.Length == 0 ? null : args);
 
-    private static object? GetCollectionItem(object collection, int index)
+    private static object? CollectionItem(object collection, int index)
     {
-        try
-        {
-            return InvokeMember(collection, "Item", BindingFlags.InvokeMethod, index);
-        }
-        catch
-        {
-            return InvokeMember(collection, "Item", BindingFlags.GetProperty, index);
-        }
+        try   { return Invoke(collection, "Item", BindingFlags.InvokeMethod, index); }
+        catch { return Invoke(collection, "Item", BindingFlags.GetProperty,  index); }
     }
 
-    private object? GetITunesProperty(string propertyName)
+    private static object? GetITunesProperty(object target, string prop)
+        => target.GetType().InvokeMember(prop, BindingFlags.GetProperty, null, target, null);
+
+    private static object? TryGet(object target, string prop)
     {
-        EnsureITunes();
-        return GetITunesProperty(_itunes!, propertyName);
+        try { return GetITunesProperty(target, prop); }
+        catch { return null; }
     }
 
-    private static object? GetITunesProperty(object target, string propertyName)
-    {
-        return target.GetType().InvokeMember(propertyName, BindingFlags.GetProperty, null, target, null);
-    }
-
-    private static object? TryGetITunesProperty(object target, string propertyName)
-    {
-        try
-        {
-            return GetITunesProperty(target, propertyName);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private void SetITunesProperty(string propertyName, object value)
+    private void SetITunesProperty(string prop, object value)
     {
         EnsureITunes();
-        _itunes!.GetType().InvokeMember(propertyName, BindingFlags.SetProperty, null, _itunes, new[] { value });
+        _itunes!.GetType().InvokeMember(prop, BindingFlags.SetProperty, null, _itunes, new[] { value });
     }
 
-    // ── Shared helpers ───────────────────────────────────────────────────────
+    // ── Shared helpers ────────────────────────────────────────────────────────
 
-    private static List<Playlist> ParsePlaylistRows(string output, string idPrefix)
+    private static List<Playlist> ParsePlaylistRows(string output, string prefix)
     {
         var results = new List<Playlist>();
-        var rows = output.Split('\u001E', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        foreach (var row in rows)
+        foreach (var row in output.Split('\u001E', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            var parts = row.Split(Separator);
-            if (parts.Length < 3) continue;
-
-            var id = parts[0];
-            var name = parts[1];
-            var count = (int)Math.Max(0, ParseDouble(parts[2]));
-
-            if (string.IsNullOrWhiteSpace(name)) continue;
-
+            var p = row.Split(Separator);
+            if (p.Length < 3 || string.IsNullOrWhiteSpace(p[1])) continue;
             results.Add(new Playlist
             {
-                Id = $"{idPrefix}:{id}",
-                Name = name,
-                TrackCount = count
+                Id         = $"{prefix}:{p[0]}",
+                Name       = p[1],
+                TrackCount = (int)Math.Max(0, ParseDouble(p[2]))
             });
         }
-
         return results;
     }
 
-    private static string EscapeAppleScriptString(string value)
-        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+    private static string EscapeAppleScriptString(string v)
+        => v.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"",  StringComparison.Ordinal);
 
     private static double ParseDouble(string value)
     {
-        if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var invariant))
-            return invariant;
-
-        if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var current))
-            return current;
-
+        if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var r)) return r;
+        if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture,   out var r2)) return r2;
         return 0;
     }
 
     private static string MapFriendlyError(Exception ex)
     {
-        var text = ex.ToString();
-
-        if (text.Contains("not authorized", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("-1743", StringComparison.OrdinalIgnoreCase))
-        {
-            return "SyncDeck needs permission to control Music.app. Allow it in macOS System Settings > Privacy & Security > Automation.";
-        }
-
-        if (text.Contains("iTunes.Application", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("osascript", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Music", StringComparison.OrdinalIgnoreCase))
-        {
-            return NotDetectedMessage;
-        }
-
-        return string.IsNullOrWhiteSpace(ex.Message) ? NotDetectedMessage : ex.Message;
+        var t = ex.ToString();
+        if (t.Contains("not authorized",      StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("-1743",               StringComparison.OrdinalIgnoreCase))
+            return "SyncDeck needs permission to control Music.app. Allow it in System Settings > Privacy & Security > Automation.";
+        if (t.Contains("iTunes.Application",  StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("osascript",           StringComparison.OrdinalIgnoreCase))
+            return NotDetectedMsg;
+        return string.IsNullOrWhiteSpace(ex.Message) ? NotDetectedMsg : ex.Message;
     }
 
-    public void Dispose()
-    {
-        _poll.Dispose();
-    }
+    public void Dispose() => _poll.Dispose();
 
     private sealed record ApplePlaybackState(bool IsAvailable, Track? Track, double PositionSeconds, bool IsPlaying, string? ErrorMessage)
     {
-        public static ApplePlaybackState Available(Track? track, double positionSeconds, bool isPlaying)
-            => new(true, track, positionSeconds, isPlaying, null);
-
-        public static ApplePlaybackState Unavailable(string message)
-            => new(false, null, 0, false, message);
+        public static ApplePlaybackState Available(Track? track, double pos, bool playing)
+            => new(true, track, pos, playing, null);
+        public static ApplePlaybackState Unavailable(string msg)
+            => new(false, null, 0, false, msg);
     }
 }
