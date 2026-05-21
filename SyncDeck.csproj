@@ -7,6 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SyncDeck</AssemblyName>
     <RootNamespace>SyncDeck</RootNamespace>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <ApplicationIcon>Assets\Icons\SyncDeck.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

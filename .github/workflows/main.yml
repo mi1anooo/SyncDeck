@@ -31,8 +31,23 @@ jobs:
       - name: Show publish output
         run: dir ./publish
 
-      - name: Upload artifact
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ./dist | Out-Null
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" ".\setup\windows\SyncDeck.iss"
+
+      - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SyncDeck-Windows
+          name: SyncDeck-Windows-Portable
           path: ./publish/**
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SyncDeck-Windows-Installer
+          path: ./dist/*.exe

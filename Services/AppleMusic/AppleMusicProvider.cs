@@ -166,14 +166,46 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
 
     public Task<double> GetProgressAsync() => Task.FromResult(_position);
 
-    public Task<List<Playlist>> GetPlaylistsAsync()
+    public async Task<List<Playlist>> GetPlaylistsAsync()
     {
-        // Keep this empty for now. Local playback control is implemented first;
-        // MusicKit/library browsing can be added later without changing the UI contract.
-        return Task.FromResult(new List<Playlist>());
+        await EnsureConnectedAsync();
+
+        try
+        {
+            return OperatingSystem.IsMacOS()
+                ? await GetMacPlaylistsAsync()
+                : OperatingSystem.IsWindows()
+                    ? GetWindowsPlaylists()
+                    : new List<Playlist>();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(MapFriendlyError(ex), ex);
+        }
     }
 
-    public Task SetPlaylistAsync(string playlistId) => Task.CompletedTask;
+    public async Task SetPlaylistAsync(string playlistId)
+    {
+        if (string.IsNullOrWhiteSpace(playlistId))
+            return;
+
+        await EnsureConnectedAsync();
+
+        try
+        {
+            if (OperatingSystem.IsMacOS())
+                await PlayMacPlaylistAsync(playlistId);
+            else if (OperatingSystem.IsWindows())
+                PlayWindowsPlaylist(playlistId);
+
+            await Task.Delay(300);
+            await SafePollAsync();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(MapFriendlyError(ex), ex);
+        }
+    }
 
     public async Task SetShuffleAsync(bool enabled)
     {
@@ -386,6 +418,72 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
         return output.Trim();
     }
 
+    private static async Task<List<Playlist>> GetMacPlaylistsAsync()
+    {
+        var script = $$"""
+        if application "Music" is not running then
+            return "NOT_RUNNING"
+        end if
+
+        tell application "Music"
+            set d to ASCII character 31
+            set r to ASCII character 30
+            set output to ""
+
+            repeat with p in user playlists
+                try
+                    set playlistName to name of p as string
+                    set playlistId to persistent ID of p as string
+                    set trackCount to count of tracks of p
+
+                    if playlistName is not "" then
+                        set output to output & playlistId & d & playlistName & d & (trackCount as string) & r
+                    end if
+                end try
+            end repeat
+
+            return output
+        end tell
+        """;
+
+        var output = await RunAppleScriptAsync(script);
+        if (string.IsNullOrWhiteSpace(output) || output.StartsWith("NOT_RUNNING", StringComparison.OrdinalIgnoreCase))
+            return new List<Playlist>();
+
+        return ParsePlaylistRows(output, "music");
+    }
+
+    private static async Task PlayMacPlaylistAsync(string playlistId)
+    {
+        var id = playlistId.StartsWith("music:", StringComparison.OrdinalIgnoreCase)
+            ? playlistId[6..]
+            : playlistId;
+
+        var safeId = EscapeAppleScriptString(id);
+        var script = $$"""
+        tell application "Music"
+            set targetPlaylist to missing value
+
+            repeat with p in user playlists
+                try
+                    if (persistent ID of p as string) is "{{safeId}}" then
+                        set targetPlaylist to p
+                        exit repeat
+                    end if
+                end try
+            end repeat
+
+            if targetPlaylist is missing value then
+                error "Playlist not found."
+            end if
+
+            play targetPlaylist
+        end tell
+        """;
+
+        await RunAppleScriptAsync(script);
+    }
+
     // ── Windows / iTunes COM ─────────────────────────────────────────────────
 
     private ApplePlaybackState ReadWindowsState()
@@ -425,6 +523,90 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
         }
     }
 
+    private List<Playlist> GetWindowsPlaylists()
+    {
+        EnsureITunes();
+
+        var results = new List<Playlist>();
+        var sources = GetITunesProperty(_itunes!, "Sources");
+        var sourceCount = Convert.ToInt32(TryGetITunesProperty(sources!, "Count") ?? 0, CultureInfo.InvariantCulture);
+
+        for (var sourceIndex = 1; sourceIndex <= sourceCount; sourceIndex++)
+        {
+            var source = GetCollectionItem(sources!, sourceIndex);
+            var playlists = TryGetITunesProperty(source!, "Playlists");
+            if (playlists is null) continue;
+
+            var playlistCount = Convert.ToInt32(TryGetITunesProperty(playlists, "Count") ?? 0, CultureInfo.InvariantCulture);
+            for (var playlistIndex = 1; playlistIndex <= playlistCount; playlistIndex++)
+            {
+                try
+                {
+                    var playlist = GetCollectionItem(playlists, playlistIndex);
+                    if (playlist is null) continue;
+
+                    var name = Convert.ToString(TryGetITunesProperty(playlist, "Name"), CultureInfo.InvariantCulture) ?? "";
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                    var trackCount = GetITunesPlaylistTrackCount(playlist);
+                    if (trackCount <= 0) continue;
+
+                    results.Add(new Playlist
+                    {
+                        Id = $"itunes:{sourceIndex}:{playlistIndex}",
+                        Name = name,
+                        TrackCount = trackCount
+                    });
+                }
+                catch
+                {
+                    // Some special iTunes playlist types cannot be read consistently.
+                    // Ignore those rather than breaking the whole playlist picker.
+                }
+            }
+        }
+
+        return results;
+    }
+
+    private void PlayWindowsPlaylist(string playlistId)
+    {
+        EnsureITunes();
+
+        var parts = playlistId.Split(':');
+        if (parts.Length != 3 || !int.TryParse(parts[1], out var sourceIndex) || !int.TryParse(parts[2], out var playlistIndex))
+            throw new InvalidOperationException("Invalid iTunes playlist id.");
+
+        var sources = GetITunesProperty(_itunes!, "Sources");
+        var source = GetCollectionItem(sources!, sourceIndex);
+        var playlists = TryGetITunesProperty(source!, "Playlists")
+            ?? throw new InvalidOperationException("No iTunes playlists were found.");
+        var playlist = GetCollectionItem(playlists, playlistIndex)
+            ?? throw new InvalidOperationException("Playlist not found.");
+
+        try
+        {
+            InvokeMember(playlist, "PlayFirstTrack", BindingFlags.InvokeMethod);
+        }
+        catch
+        {
+            InvokeMember(_itunes!, "PlayPlaylist", BindingFlags.InvokeMethod, playlist);
+        }
+    }
+
+    private static int GetITunesPlaylistTrackCount(object playlist)
+    {
+        try
+        {
+            var tracks = TryGetITunesProperty(playlist, "Tracks");
+            return Convert.ToInt32(TryGetITunesProperty(tracks!, "Count") ?? 0, CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     private void EnsureITunes()
     {
         if (_itunes is not null)
@@ -441,7 +623,22 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
     private void InvokeITunes(string methodName, params object?[] args)
     {
         EnsureITunes();
-        _itunes!.GetType().InvokeMember(methodName, BindingFlags.InvokeMethod, null, _itunes, args);
+        InvokeMember(_itunes!, methodName, BindingFlags.InvokeMethod, args);
+    }
+
+    private static object? InvokeMember(object target, string memberName, BindingFlags flags, params object?[] args)
+        => target.GetType().InvokeMember(memberName, flags, null, target, args.Length == 0 ? null : args);
+
+    private static object? GetCollectionItem(object collection, int index)
+    {
+        try
+        {
+            return InvokeMember(collection, "Item", BindingFlags.InvokeMethod, index);
+        }
+        catch
+        {
+            return InvokeMember(collection, "Item", BindingFlags.GetProperty, index);
+        }
     }
 
     private object? GetITunesProperty(string propertyName)
@@ -474,6 +671,36 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
     }
 
     // ── Shared helpers ───────────────────────────────────────────────────────
+
+    private static List<Playlist> ParsePlaylistRows(string output, string idPrefix)
+    {
+        var results = new List<Playlist>();
+        var rows = output.Split('\u001E', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var row in rows)
+        {
+            var parts = row.Split(Separator);
+            if (parts.Length < 3) continue;
+
+            var id = parts[0];
+            var name = parts[1];
+            var count = (int)Math.Max(0, ParseDouble(parts[2]));
+
+            if (string.IsNullOrWhiteSpace(name)) continue;
+
+            results.Add(new Playlist
+            {
+                Id = $"{idPrefix}:{id}",
+                Name = name,
+                TrackCount = count
+            });
+        }
+
+        return results;
+    }
+
+    private static string EscapeAppleScriptString(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
 
     private static double ParseDouble(string value)
     {

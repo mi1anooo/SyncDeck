@@ -24,7 +24,11 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private ThemeDefinition _selectedTheme = ThemeManager.All[0];
 
     partial void OnSelectedThemeChanged(ThemeDefinition value)
-        => _theme.ApplyTheme(value.Id);
+    {
+        _theme.ApplyTheme(value.Id);
+        _persisted.CurrentTheme = value.Id;
+        SettingsService.Save(_persisted);
+    }
 
     // ── Source ────────────────────────────────────────────────────────────────
 
@@ -40,6 +44,7 @@ public partial class SettingsViewModel : ObservableObject
         _music.SwitchProvider(key);
         _persisted.CurrentProvider = key;
         SettingsService.Save(_persisted);
+        PlaylistStatusText = "Scanning playlists...";
         _ = RefreshPlaylistsAsync();
     }
 
@@ -109,14 +114,32 @@ public partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<Playlist> Playlists { get; } = new();
 
+    private bool _suppressPlaylistChange;
+
     [ObservableProperty] private Playlist? _selectedPlaylist;
+    [ObservableProperty] private bool _hasPlaylists;
+    [ObservableProperty] private string _playlistStatusText = "Connect Apple Music/iTunes or Spotify, then refresh playlists.";
 
     partial void OnSelectedPlaylistChanged(Playlist? value)
     {
-        if (value is null) return;
-        _ = _music.SetPlaylistAsync(value.Id);
-        _persisted.LastPlaylistId = value.Id;
-        SettingsService.Save(_persisted);
+        if (_suppressPlaylistChange || value is null) return;
+        _ = SelectPlaylistAsync(value);
+    }
+
+    private async Task SelectPlaylistAsync(Playlist playlist)
+    {
+        try
+        {
+            PlaylistStatusText = $"Loading {playlist.Name}...";
+            await _music.SetPlaylistAsync(playlist.Id);
+            _persisted.LastPlaylistId = playlist.Id;
+            SettingsService.Save(_persisted);
+            PlaylistStatusText = $"Playing {playlist.Name}";
+        }
+        catch (Exception ex)
+        {
+            PlaylistStatusText = ex.Message;
+        }
     }
 
     // ── Turntable playback speed ─────────────────────────────────────────────
@@ -199,15 +222,57 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
+            PlaylistStatusText = "Scanning playlists...";
             var lists = await _music.GetPlaylistsAsync();
+
             Dispatcher.UIThread.Post(() =>
             {
-                Playlists.Clear();
-                foreach (var p in lists) Playlists.Add(p);
-                if (Playlists.Count > 0) SelectedPlaylist = Playlists[0];
+                _suppressPlaylistChange = true;
+                try
+                {
+                    var previousSelection = SelectedPlaylist?.Id ?? _persisted.LastPlaylistId;
+
+                    Playlists.Clear();
+                    foreach (var p in lists) Playlists.Add(p);
+
+                    HasPlaylists = Playlists.Count > 0;
+                    SelectedPlaylist = null;
+
+                    if (HasPlaylists)
+                    {
+                        foreach (var playlist in Playlists)
+                        {
+                            if (playlist.Id == previousSelection)
+                            {
+                                SelectedPlaylist = playlist;
+                                break;
+                            }
+                        }
+
+                        SelectedPlaylist ??= Playlists[0];
+                        PlaylistStatusText = $"{Playlists.Count} playlist{(Playlists.Count == 1 ? "" : "s")} found";
+                    }
+                    else
+                    {
+                        PlaylistStatusText = SelectedSource == "Apple Music"
+                            ? "No local playlists found. Open iTunes/Music and make sure Sync Library is enabled."
+                            : "No playlists found for this source.";
+                    }
+                }
+                finally
+                {
+                    _suppressPlaylistChange = false;
+                }
             });
         }
-        catch { /* provider may not support playlists */ }
+        catch (Exception ex)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                HasPlaylists = false;
+                PlaylistStatusText = ex.Message;
+            });
+        }
     }
 
     [RelayCommand]

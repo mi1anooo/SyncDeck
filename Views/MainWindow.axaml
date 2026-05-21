@@ -6,8 +6,9 @@
         x:Class="SyncDeck.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="SyncDeck"
-        Width="760" Height="430"
-        MinWidth="680" MinHeight="380"
+        Icon="/Assets/Icons/SyncDeck.ico"
+        Width="820" Height="460"
+        MinWidth="740" MinHeight="410"
         MaxWidth="1040" MaxHeight="620"
         SystemDecorations="None"
         Background="Transparent"
@@ -131,7 +132,7 @@
         IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen}"
         HorizontalAlignment="Right"
         VerticalAlignment="Top"
-        Width="250"
+        Width="292"
         Margin="0,58,26,0"
         ZIndex="100" />
 
