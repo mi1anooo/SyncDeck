@@ -297,7 +297,7 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
         catch { return null; }
     }
 
-    private static async Task<ApplePlaybackState> ReadMacStateAsync()
+    private async Task<ApplePlaybackState> ReadMacStateAsync()
     {
         var script = """
         if application "Music" is not running then
@@ -631,6 +631,7 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
         catch { return null; }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private void EnsureITunes()
     {
         if (_itunes is not null) return;
