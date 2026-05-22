@@ -12,13 +12,12 @@
         MaxWidth="1100" MaxHeight="700"
         SystemDecorations="None"
         Background="Transparent"
-        TransparencyLevelHint="AcrylicBlur"
+        TransparencyLevelHint="None"
         CanResize="True"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaChromeHints="NoChrome">
 
   <Window.Styles>
-    <!-- ── Chrome button (round, translucent) ──────────────────────────────── -->
     <Style Selector="Button.chrome">
       <Setter Property="Background"      Value="#12FFFFFF" />
       <Setter Property="BorderBrush"     Value="#22FFFFFF" />
@@ -29,8 +28,6 @@
     <Style Selector="Button.chrome:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="#24FFFFFF" />
     </Style>
-
-    <!-- ── Transport primary button ─────────────────────────────────────────── -->
     <Style Selector="Button.turntablePrimary">
       <Setter Property="Background"      Value="#202020" />
       <Setter Property="BorderBrush"     Value="#38FFFFFF" />
@@ -44,8 +41,6 @@
     <Style Selector="Button.turntablePrimary:pressed /template/ ContentPresenter">
       <Setter Property="Background" Value="#141414" />
     </Style>
-
-    <!-- ── Transport secondary button ───────────────────────────────────────── -->
     <Style Selector="Button.turntableSecondary">
       <Setter Property="Background"      Value="#0E0E0E" />
       <Setter Property="BorderBrush"     Value="#24FFFFFF" />
@@ -56,8 +51,6 @@
     <Style Selector="Button.turntableSecondary:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="#1B1B1B" />
     </Style>
-
-    <!-- ── ComboBox ─────────────────────────────────────────────────────────── -->
     <Style Selector="ComboBox">
       <Setter Property="Background"  Value="#151515" />
       <Setter Property="Foreground"  Value="#E2E2DC" />
@@ -67,13 +60,15 @@
 
   <Panel>
 
-    <!-- ══════════════════════════════════════════════════════════════════════
-         Main window body — no margin, no outer border, no shadow ring.
-         CornerRadius clips the content into the rounded-rect shape.
-         ═══════════════════════════════════════════════════════════════════ -->
-    <Border CornerRadius="28"
+    <!--
+      NO Margin. NO BorderBrush. NO DropShadowEffect.
+      CornerRadius="34" + ClipToBounds="True" is the ONLY shaping.
+      The window background is Transparent so the OS desktop shows through
+      outside the rounded corners.
+    -->
+    <Border CornerRadius="34"
             ClipToBounds="True"
-            Background="#0D0D0D"
+            Background="#101010"
             BorderThickness="0">
 
       <Grid RowDefinitions="48,*">
@@ -81,13 +76,13 @@
         <!-- Title bar -->
         <ctrl:TitleBarControl Grid.Row="0" x:Name="TitleBar" />
 
-        <!-- ── Landscape layout (wide) ──────────────────────────────────── -->
+        <!-- ── Landscape layout ──────────────────────────────────────────── -->
         <Grid Grid.Row="1"
               x:Name="LandscapeLayout"
               ColumnDefinitions="2.35*,*"
-              Margin="10,0,14,14">
+              Margin="10,0,18,18">
 
-          <!-- Turntable (left column) -->
+          <!-- Turntable left column -->
           <ctrl:TurntableControl Grid.Column="0"
                                  IsPlaying="{Binding IsPlaying}"
                                  TrackChanging="{Binding TrackChanging}"
@@ -98,8 +93,8 @@
                                  PlaybackRpm="{Binding Settings.PlaybackRpm}"
                                  Margin="0,-8,0,0" />
 
-          <!-- Right panel: metadata + controls -->
-          <Grid Grid.Column="1" RowDefinitions="*,Auto" Margin="2,18,4,6">
+          <!-- Right panel -->
+          <Grid Grid.Column="1" RowDefinitions="*,Auto" Margin="2,20,6,8">
             <ctrl:TrackMetadataView Grid.Row="0"
                                     TrackTitle="{Binding TrackTitle}"
                                     Artist="{Binding Artist}"
@@ -107,7 +102,6 @@
                                     AlbumArtData="{Binding AlbumArtData}"
                                     ElapsedText="{Binding ElapsedText}"
                                     DurationText="{Binding DurationText}" />
-
             <ctrl:MinimalPlaybackControls Grid.Row="1"
                                           x:Name="Transport"
                                           IsPlaying="{Binding IsPlaying}"
@@ -122,14 +116,13 @@
           </Grid>
         </Grid>
 
-        <!-- ── Compact layout (narrow) ──────────────────────────────────── -->
+        <!-- ── Compact layout ────────────────────────────────────────────── -->
         <Grid Grid.Row="1"
               x:Name="CompactLayout"
               RowDefinitions="*,Auto,Auto"
               Margin="10,0,10,14"
               IsVisible="False">
 
-          <!-- Turntable fills top -->
           <ctrl:TurntableControl Grid.Row="0"
                                  IsPlaying="{Binding IsPlaying}"
                                  TrackChanging="{Binding TrackChanging}"
@@ -139,7 +132,6 @@
                                  Duration="{Binding Duration}"
                                  PlaybackRpm="{Binding Settings.PlaybackRpm}" />
 
-          <!-- Track info below -->
           <ctrl:TrackMetadataView Grid.Row="1"
                                   TrackTitle="{Binding TrackTitle}"
                                   Artist="{Binding Artist}"
@@ -149,7 +141,6 @@
                                   DurationText="{Binding DurationText}"
                                   Margin="0,8,0,0" />
 
-          <!-- Controls at bottom -->
           <ctrl:MinimalPlaybackControls Grid.Row="2"
                                         IsPlaying="{Binding IsPlaying}"
                                         Position="{Binding Position}"
@@ -165,24 +156,24 @@
       </Grid>
     </Border>
 
-    <!-- ── Settings overlay ─────────────────────────────────────────────────── -->
+    <!-- Settings overlay -->
     <panels:SettingsPanel
         DataContext="{Binding Settings}"
         IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen}"
         HorizontalAlignment="Right"
         VerticalAlignment="Top"
         Width="292"
-        Margin="0,52,20,0"
+        Margin="0,58,26,0"
         ZIndex="100" />
 
-    <!-- ── Status bar ───────────────────────────────────────────────────────── -->
+    <!-- Status message -->
     <TextBlock Text="{Binding StatusMessage}"
                Foreground="#A8FFFFFF"
                FontSize="10"
                TextAlignment="Center"
                HorizontalAlignment="Stretch"
                VerticalAlignment="Bottom"
-               Margin="24,0,24,22"
+               Margin="24,0,24,26"
                IsVisible="{Binding StatusMessage,
                            Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 

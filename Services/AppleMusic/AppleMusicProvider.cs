@@ -34,6 +34,7 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
     private double _position;
     private bool   _playing;
     private bool   _connected;
+    private string _lastArtTrackId = "";   // skip artwork fetch when same track
     private object? _itunes;
 
     public string ProviderName    => "Apple Music";
@@ -254,6 +255,48 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
 
     // ── macOS / AppleScript ───────────────────────────────────────────────────
 
+    /// <summary>
+    /// Exports the artwork for the current track to a temp PNG via AppleScript,
+    /// reads the bytes, then deletes the file. Returns null on any failure.
+    /// </summary>
+    private static async Task<byte[]?> FetchMacArtworkAsync(string trackId)
+    {
+        if (string.IsNullOrWhiteSpace(trackId)) return null;
+        try
+        {
+            var tempPath  = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "syncdeck_art.jpg");
+            var safePath  = tempPath.Replace("\\", "/");
+            var script = $"""
+            if application "Music" is not running then return "SKIP"
+            tell application "Music"
+                try
+                    set t to current track
+                    set artList to artworks of t
+                    if (count of artList) > 0 then
+                        set art to item 1 of artList
+                        set artData to raw data of art
+                        set f to open for access POSIX file "{safePath}" with write permission
+                        set eof f to 0
+                        write artData to f
+                        close access f
+                        return "OK"
+                    end if
+                end try
+            end tell
+            return "SKIP"
+            """;
+
+            var result = await RunAppleScriptAsync(script);
+            if (!result.StartsWith("OK", StringComparison.OrdinalIgnoreCase)) return null;
+            if (!System.IO.File.Exists(tempPath)) return null;
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(tempPath);
+            try { System.IO.File.Delete(tempPath); } catch { /* non-fatal */ }
+            return bytes.Length > 0 ? bytes : null;
+        }
+        catch { return null; }
+    }
+
     private static async Task<ApplePlaybackState> ReadMacStateAsync()
     {
         var script = """
@@ -304,15 +347,21 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
         if (parts.Length < 7 || parts[0].Equals("STOPPED", StringComparison.OrdinalIgnoreCase))
             return ApplePlaybackState.Available(Track.Empty, 0, false);
 
-        var duration = ParseDouble(parts[4]);
-        var position = ParseDouble(parts[5]);
+        var duration     = ParseDouble(parts[4]);
+        var position     = ParseDouble(parts[5]);
+        var trackId      = string.IsNullOrWhiteSpace(parts[0]) ? $"apple-{parts[1]}-{parts[2]}" : parts[0];
+        var artworkBytes = (trackId != _lastArtTrackId)
+            ? await FetchMacArtworkAsync(trackId)
+            : _current?.AlbumArtData;
+        if (artworkBytes is not null) _lastArtTrackId = trackId;
         var track = new Track
         {
-            Id       = string.IsNullOrWhiteSpace(parts[0]) ? $"apple-{parts[1]}-{parts[2]}" : parts[0],
-            Title    = string.IsNullOrWhiteSpace(parts[1]) ? "Unknown Track"  : parts[1],
-            Artist   = string.IsNullOrWhiteSpace(parts[2]) ? "Unknown Artist" : parts[2],
-            Album    = parts[3],
-            Duration = TimeSpan.FromSeconds(Math.Max(0, duration))
+            Id           = trackId,
+            Title        = string.IsNullOrWhiteSpace(parts[1]) ? "Unknown Track"  : parts[1],
+            Artist       = string.IsNullOrWhiteSpace(parts[2]) ? "Unknown Artist" : parts[2],
+            Album        = parts[3],
+            Duration     = TimeSpan.FromSeconds(Math.Max(0, duration)),
+            AlbumArtData = artworkBytes
         };
         return ApplePlaybackState.Available(track, position,
             parts[6].Equals("playing", StringComparison.OrdinalIgnoreCase));
@@ -419,13 +468,19 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
             var duration = Convert.ToDouble(TryGet(currentTrack, "Duration") ?? 0.0, CultureInfo.InvariantCulture);
             var id       = Convert.ToString(TryGet(currentTrack, "TrackDatabaseID"), CultureInfo.InvariantCulture);
 
+            var computedId   = string.IsNullOrWhiteSpace(id) ? $"itunes-{title}-{artist}" : id;
+            var artworkBytes = (computedId != _lastArtTrackId)
+                ? FetchITunesArtworkBytes(currentTrack)
+                : _current?.AlbumArtData;
+            if (artworkBytes is not null) _lastArtTrackId = computedId;
             var track = new Track
             {
-                Id       = string.IsNullOrWhiteSpace(id) ? $"itunes-{title}-{artist}" : id,
-                Title    = string.IsNullOrWhiteSpace(title)  ? "Unknown Track"  : title,
-                Artist   = string.IsNullOrWhiteSpace(artist) ? "Unknown Artist" : artist,
-                Album    = album,
-                Duration = TimeSpan.FromSeconds(Math.Max(0, duration))
+                Id           = computedId,
+                Title        = string.IsNullOrWhiteSpace(title)  ? "Unknown Track"  : title,
+                Artist       = string.IsNullOrWhiteSpace(artist) ? "Unknown Artist" : artist,
+                Album        = album,
+                Duration     = TimeSpan.FromSeconds(Math.Max(0, duration)),
+                AlbumArtData = artworkBytes
             };
             return ApplePlaybackState.Available(track, position, isPlaying);
         }
@@ -545,6 +600,35 @@ public class AppleMusicProvider : IMusicProvider, IDisposable
             return Convert.ToInt32(TryGet(tracks!, "Count") ?? 0, CultureInfo.InvariantCulture);
         }
         catch { return 0; }
+    }
+
+    /// <summary>
+    /// Extracts artwork from the iTunes COM track object via SaveArtworkToFile.
+    /// Falls back gracefully to null on any failure.
+    /// </summary>
+    private static byte[]? FetchITunesArtworkBytes(object? track)
+    {
+        if (track is null) return null;
+        try
+        {
+            var artworks   = TryGet(track, "Artwork");
+            if (artworks is null) return null;
+            var count = Convert.ToInt32(TryGet(artworks, "Count") ?? 0, CultureInfo.InvariantCulture);
+            if (count <= 0) return null;
+
+            var art     = CollectionItem(artworks, 1);
+            if (art is null) return null;
+
+            var tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "syncdeck_art.jpg");
+            // SaveArtworkToFile(path) writes the art as JPEG
+            Invoke(art, "SaveArtworkToFile", BindingFlags.InvokeMethod, tempPath);
+
+            if (!System.IO.File.Exists(tempPath)) return null;
+            var bytes = System.IO.File.ReadAllBytes(tempPath);
+            try { System.IO.File.Delete(tempPath); } catch { /* non-fatal */ }
+            return bytes.Length > 0 ? bytes : null;
+        }
+        catch { return null; }
     }
 
     private void EnsureITunes()

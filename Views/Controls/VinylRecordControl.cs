@@ -110,7 +110,6 @@ public class VinylRecordControl : Control, IDisposable
                 DrawAlbumArtFullDisc(ctx, cx, cy, radius);
 
             DrawGrooveOverlay(ctx, cx, cy, radius);
-            DrawRotatingHighlight(ctx, cx, cy, radius);
         }
 
         // ── Static elements (never rotate) ────────────────────────────────────
